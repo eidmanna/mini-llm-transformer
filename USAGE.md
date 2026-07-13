@@ -1,0 +1,262 @@
+# Bedienungsanleitung: Mini-LLM Transformer
+
+Diese Anleitung beschreibt, wie du das Projekt einrichtest, das Training startest, die Ausgabe interpretierst und mit den Hyperparametern experimentierst.
+
+---
+
+## Inhaltsverzeichnis
+
+1. [Voraussetzungen](#1-voraussetzungen)
+2. [Installation](#2-installation)
+3. [Training starten](#3-training-starten)
+4. [Ausgabe verstehen](#4-ausgabe-verstehen)
+5. [Hyperparameter anpassen](#5-hyperparameter-anpassen)
+6. [Beobachtbare Lernphasen](#6-beobachtbare-lernphasen)
+7. [Trainingsdaten austauschen](#7-trainingsdaten-austauschen)
+8. [Modell-Checkpoint laden](#8-modell-checkpoint-laden)
+9. [Architektur-Überblick](#9-architektur-überblick)
+10. [Tipps für Experimente](#10-tipps-für-experimente)
+
+---
+
+## 1. Voraussetzungen
+
+| Anforderung | Version |
+|---|---|
+| [uv](https://docs.astral.sh/uv/) | aktuell |
+| Python | 3.10 – 3.12 (wird von uv automatisch installiert) |
+| Betriebssystem | macOS Intel (x86_64), optimiert für CPU |
+
+> **Hinweis:** Python 3.13 wird von PyTorch auf Intel-Mac noch nicht unterstützt. uv installiert automatisch die passende Version 3.12.
+
+---
+
+## 2. Installation
+
+```bash
+# In den Projektordner wechseln
+cd /Users/andreaseidmann/Development/llm-mini-transformer
+
+# Python 3.12 installieren (einmalig) und Abhängigkeiten auflösen
+uv sync --python 3.12
+```
+
+uv legt dabei automatisch eine isolierte virtuelle Umgebung unter `.venv/` an und installiert:
+- `torch 2.2.x` – Neural-Network-Framework
+- `tqdm` – Fortschrittsanzeige
+
+---
+
+## 3. Training starten
+
+```bash
+uv run python train.py
+```
+
+Das Skript läuft vollständig auf der CPU. Eine typische Laufzeit auf einem Intel-Mac:
+
+| `max_iters` | Ungefähre Dauer |
+|---|---|
+| 3 000 | ~5 Minuten |
+| 5 000 | ~8–10 Minuten |
+
+Nach Abschluss wird das Modell automatisch als `model_checkpoint.pt` gespeichert.
+
+---
+
+## 4. Ausgabe verstehen
+
+Beim Start gibt das Skript eine Zusammenfassung der Konfiguration aus:
+
+```
+═════════════════════════════════════════════════════════════════
+  Mini-Transformer – Lernexperiment
+═════════════════════════════════════════════════════════════════
+  Gerät          : cpu
+  Zeichen gesamt : 5.306
+  Vokabular-Größe: 68 eindeutige Zeichen
+  ...
+```
+
+Alle `eval_interval` Iterationen erscheint ein Zwischen-Report:
+
+```
+─────────────────────────────────────────────────────────────────
+  Iter   250/5000  ( 5.0%)  Zeit: 28s
+  Train-Loss: 2.8134  |  Val-Loss: 2.9021  |  LR: 9.50e-04
+
+  ▶ Generierter Text:
+  'Der Wald ist ein wich...'
+```
+
+| Ausgabe | Bedeutung |
+|---|---|
+| `Train-Loss` | Fehler auf den Trainingsdaten – sollte sinken |
+| `Val-Loss` | Fehler auf zurückgehaltenen Daten – zeigt Generalisierung |
+| `LR` | Aktuelle Lernrate (sinkt bei aktivem Scheduler) |
+| Generierter Text | Live-Probe, wie gut das Modell bereits schreibt |
+
+> **Tipp:** Wenn `Val-Loss` deutlich größer als `Train-Loss` wird, passt sich das Modell zu stark an die Trainingsdaten an (Overfitting). Erhöhe dann `dropout`.
+
+---
+
+## 5. Hyperparameter anpassen
+
+Öffne `train.py` und ändere die Werte im `CONFIG`-Dictionary ganz oben im Skript. Danach Training einfach neu starten.
+
+### Kontextlänge: `block_size`
+
+Wie viele Zeichen das Modell gleichzeitig als Kontext sieht.
+
+| Wert | Effekt |
+|---|---|
+| `32` | Sehr schnell, kurzer Kontext – lernt nur kurze Muster |
+| `64` | **Standard** – guter Kompromiss |
+| `128` | Längerer Kontext, aber ~2× langsamer |
+
+### Batch-Größe: `batch_size`
+
+Wie viele Textausschnitte pro Trainingsschritt verarbeitet werden.
+
+| Wert | Effekt |
+|---|---|
+| `16` | Wenig RAM, rauschigere Gradientupdates |
+| `32` | **Standard** |
+| `64` | Stabilere Updates, mehr Arbeitsspeicher nötig |
+
+### Modell-Größe: `n_embd`, `n_heads`, `n_layers`
+
+```python
+"n_embd":   64,   # Embedding-Dimension (Breite des Modells)
+"n_heads":  4,    # Attention-Heads — n_embd muss durch n_heads teilbar sein!
+"n_layers": 4,    # Anzahl gestapelter Transformer-Blöcke (Tiefe)
+```
+
+> **Wichtig:** `n_embd` muss immer ohne Rest durch `n_heads` teilbar sein.  
+> Beispiel: `n_embd=128` → `n_heads=8` ✓ | `n_heads=6` ✗
+
+### Lernrate & Scheduler
+
+```python
+"learning_rate":    1e-3,   # Startwert; bei Plateau auf 5e-4 oder 1e-4 senken
+"use_lr_scheduler": True,   # True → lineare Abnahme bis 10 % des Startwertes
+```
+
+### Zwischen-Generierung
+
+```python
+"eval_interval":   250,    # Alle X Iterationen: Loss + Textbeispiel ausgeben
+"gen_start_text":  "Der",  # Startwort für den generierten Beispieltext
+"gen_max_tokens":  120,    # Anzahl generierter Zeichen pro Zwischen-Report
+"gen_temperature": 0.8,    # < 1.0 → konservativer | > 1.0 → kreativer/zufälliger
+"gen_top_k":       40,     # Nur die k wahrscheinlichsten Kandidaten berücksichtigen
+```
+
+---
+
+## 6. Beobachtbare Lernphasen
+
+| Loss-Bereich | Was du im generierten Text siehst |
+|---|---|
+| ~4.2 | Reiner Buchstabensalat, keinerlei Muster |
+| ~3.5 | Häufige Zeichen (`e`, `n`, Leerzeichen) häufen sich an |
+| ~2.5 | Wortähnliche Strukturen, gelegentlich echte Wörter |
+| ~2.0 | Kurze deutsche Wörter, einfache Wortfolgen |
+| ~1.5 | Echte Wörter überwiegen, ansatzweise Grammatik sichtbar |
+
+---
+
+## 7. Trainingsdaten austauschen
+
+Ersetze den Inhalt von `data/training_text.txt` durch einen beliebigen deutschen Text. Mehr Daten → bessere Ergebnisse.
+
+```bash
+# Beispiel: eigenen Text hineinkopieren
+pbpaste > data/training_text.txt
+```
+
+Empfehlung: mindestens 5.000 Zeichen, besser 20.000+. Das Vokabular (alle eindeutigen Zeichen) wird automatisch aus dem Text ermittelt.
+
+---
+
+## 8. Modell nach dem Training verwenden
+
+Nach dem Training wird `model_checkpoint.pt` gespeichert. Zur Textgenerierung gibt es das fertige Skript `generate.py`.
+
+### Einfacher Start
+
+```bash
+uv run python generate.py
+```
+
+Verwendet den gespeicherten Checkpoint und startet mit dem Startwort `"Der"`.
+
+### Optionen
+
+```bash
+uv run python generate.py --start "Die Wissenschaft"   # anderes Startwort
+uv run python generate.py --tokens 500                 # mehr Zeichen generieren
+uv run python generate.py --temperature 0.5            # fokussierter (weniger Zufall)
+uv run python generate.py --temperature 1.2            # kreativer (mehr Zufall)
+uv run python generate.py --top_k 10                   # nur Top-10 Kandidaten
+```
+
+### Alle Optionen im Überblick
+
+| Option | Standard | Beschreibung |
+|---|---|---|
+| `--checkpoint` | `model_checkpoint.pt` | Pfad zum gespeicherten Checkpoint |
+| `--start` | `"Der"` | Starttext für die Generierung |
+| `--tokens` | `200` | Anzahl zu generierender Zeichen |
+| `--temperature` | `0.8` | `< 1.0` fokussiert · `> 1.0` kreativ |
+| `--top_k` | `40` | Nur die k wahrscheinlichsten Kandidaten |
+
+### Kombination mehrerer Optionen
+
+```bash
+uv run python generate.py \
+  --start "Der Wald ist" \
+  --tokens 400 \
+  --temperature 0.6 \
+  --top_k 20
+```
+
+---
+
+## 9. Architektur-Überblick
+
+```
+Text → Character-Tokenizer → Token-IDs
+                                  ↓
+                    Token-Embedding  (n_embd Dimensionen)
+                  + Position-Embedding (Position 0 … block_size-1)
+                                  ↓
+                    ┌─── N × Transformer-Block ───────────────┐
+                    │  LayerNorm                              │
+                    │  → Masked Multi-Head Self-Attention     │
+                    │     (kausale Maske: nur Vergangenheit)  │
+                    │  LayerNorm                              │
+                    │  → Feed-Forward-Netz (4×n_embd, ReLU)  │
+                    └─────────────────────────────────────────┘
+                                  ↓
+                    LayerNorm → Linear → Logits (vocab_size)
+                                  ↓
+                    Cross-Entropy Loss  /  Softmax-Sampling
+```
+
+**Decoder-Only / Kausal:** Position `i` darf nur auf Positionen `0…i` schauen – nie in die Zukunft. Das ist die Grundeigenschaft von GPT-artigen Modellen.
+
+| Datei | Inhalt |
+|---|---|
+| `model.py` | `Head`, `MultiHeadAttention`, `FeedForward`, `Block`, `MiniTransformer` |
+| `train.py` | Character-Tokenizer, Datenlader, Trainings-Loop, Evaluierung, Generierung |
+
+---
+
+## 10. Tipps für Experimente
+
+1. **Klein anfangen:** Setze `n_embd=32`, `n_layers=2` – beobachte die Ausgabe, dann skaliere schrittweise hoch.
+2. **Overfitting erkennen:** `val_loss` wächst, während `train_loss` sinkt → `dropout` von `0.1` auf `0.2` erhöhen.
+3. **Plateau überwinden:** Loss stagniert → `learning_rate` halbieren oder `use_lr_scheduler: True` setzen.
+4. **Temperature erkunden:** Setze nach dem Training `gen_temperature` auf `0.2` (sehr fokussiert) bis `1.5` (sehr kreativ) und vergleiche die Texte.
+5. **Mehr Daten:** Je mehr deutschsprachiger Text in `data/training_text.txt`, desto flüssiger wird der generierte Text.
