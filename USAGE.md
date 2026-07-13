@@ -12,7 +12,7 @@ Diese Anleitung beschreibt, wie du das Projekt einrichtest, das Training startes
 4. [Ausgabe verstehen](#4-ausgabe-verstehen)
 5. [Hyperparameter anpassen](#5-hyperparameter-anpassen)
 6. [Beobachtbare Lernphasen](#6-beobachtbare-lernphasen)
-7. [Trainingsdaten austauschen](#7-trainingsdaten-austauschen)
+7. [Trainingsdaten erweitern](#7-trainingsdaten-erweitern)
 8. [Modell-Checkpoint laden](#8-modell-checkpoint-laden)
 9. [Architektur-Überblick](#9-architektur-überblick)
 10. [Tipps für Experimente](#10-tipps-für-experimente)
@@ -166,16 +166,56 @@ Wie viele Textausschnitte pro Trainingsschritt verarbeitet werden.
 
 ---
 
-## 7. Trainingsdaten austauschen
+## 7. Trainingsdaten erweitern
 
-Ersetze den Inhalt von `data/training_text.txt` durch einen beliebigen deutschen Text. Mehr Daten → bessere Ergebnisse.
+Mehr deutschsprachiger Text in `data/training_text.txt` → weniger Overfitting → flüssiger generierter Text.
+Empfehlung: mindestens 5.000 Zeichen, besser 20.000+. Das Vokabular (alle eindeutigen Zeichen) wird automatisch aus dem neuen Text ermittelt.
+
+### Option A: Wikipedia-Artikel automatisch laden
+
+Das Skript `fetch_wikipedia.py` lädt deutsche Wikipedia-Artikel per API, bereinigt den Text (Sonderzeichen, Wiki-Markup) und hängt ihn direkt an `data/training_text.txt` an.
 
 ```bash
-# Beispiel: eigenen Text hineinkopieren
-pbpaste > data/training_text.txt
+# Artikel laden und anhängen (Standardfall)
+uv run python fetch_wikipedia.py
+
+# Nur anzeigen, nichts schreiben (Vorschau)
+uv run python fetch_wikipedia.py --dry-run
+
+# Mehr Text pro Artikel (Standard: 4000 Zeichen)
+uv run python fetch_wikipedia.py --max-chars 8000
+
+# Andere Zieldatei
+uv run python fetch_wikipedia.py --output data/mein_text.txt
 ```
 
-Empfehlung: mindestens 5.000 Zeichen, besser 20.000+. Das Vokabular (alle eindeutigen Zeichen) wird automatisch aus dem Text ermittelt.
+| Option | Standard | Beschreibung |
+|---|---|---|
+| `--output` | `data/training_text.txt` | Zieldatei |
+| `--max-chars` | `4000` | Maximale Zeichen pro Artikel |
+| `--dry-run` | aus | Nur anzeigen, nicht schreiben |
+
+**Artikel-Liste anpassen:** Die Variable `ARTIKEL` am Anfang von `fetch_wikipedia.py` enthält die zu ladenden Artikel. Einfach ergänzen oder kürzen – deutsche Wikipedia-Titel, Leerzeichen als `_`.
+
+```python
+ARTIKEL = [
+    "Elbe",
+    "Schwarzwald",
+    "Sonnensystem",
+    # beliebig weitere Artikel ergänzen ...
+]
+```
+
+> **Hinweis:** Umlaute im Titel müssen ggf. URL-kodiert werden (z. B. `ä` → `%C3%A4`). Die meisten Titel funktionieren aber auch direkt.
+
+### Option B: Eigenen Text einfügen
+
+```bash
+# Text aus Zwischenablage anhängen (macOS)
+pbpaste >> data/training_text.txt
+
+# Oder direkt in einen Editor öffnen und Text einfügen
+```
 
 ---
 
@@ -259,4 +299,4 @@ Text → Character-Tokenizer → Token-IDs
 2. **Overfitting erkennen:** `val_loss` wächst, während `train_loss` sinkt → `dropout` von `0.1` auf `0.2` erhöhen.
 3. **Plateau überwinden:** Loss stagniert → `learning_rate` halbieren oder `use_lr_scheduler: True` setzen.
 4. **Temperature erkunden:** Setze nach dem Training `gen_temperature` auf `0.2` (sehr fokussiert) bis `1.5` (sehr kreativ) und vergleiche die Texte.
-5. **Mehr Daten:** Je mehr deutschsprachiger Text in `data/training_text.txt`, desto flüssiger wird der generierte Text.
+5. **Mehr Daten:** Je mehr deutschsprachiger Text in `data/training_text.txt`, desto flüssiger wird der generierte Text. Nutze `fetch_wikipedia.py` um schnell weitere Artikel hinzuzufügen.
