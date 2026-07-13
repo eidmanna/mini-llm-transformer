@@ -9,6 +9,10 @@
 
 1. [Das große Bild – Was tut ein Sprachmodell überhaupt?](#1-das-große-bild)
 2. [Vom Text zu Zahlen – Tokenisierung und Embedding](#2-vom-text-zu-zahlen)
+   - [2.1 Character-Level-Tokenizer](#21-character-level-tokenizer)
+   - [2.2 BPE-Tokenizer (Byte Pair Encoding)](#22-bpe-tokenizer-byte-pair-encoding)
+   - [2.3 Token-Embedding](#23-token-embedding)
+   - [2.4 Positions-Embedding](#24-positions-embedding)
 3. [Der Attention-Mechanismus – Wie Tokens „miteinander sprechen"](#3-der-attention-mechanismus)
 4. [Multi-Head Attention – Mehrere Perspektiven gleichzeitig](#4-multi-head-attention)
 5. [Feed-Forward-Netz – Nichtlineare Transformation](#5-feed-forward-netz)
@@ -54,11 +58,11 @@ flowchart TD
 
 ## 2. Vom Text zu Zahlen
 
-### 2.1 Tokenisierung (Character-Level)
+Neuronale Netze arbeiten mit Zahlen, nicht mit Text. Der erste Schritt ist daher die **Tokenisierung**: Text wird in eine Folge von Ganzzahlen (Token-IDs) umgewandelt. Das Projekt bietet zwei Tokenizer-Implementierungen in [`tokenizer.py`](tokenizer.py), wählbar über den `--tokenizer`-Parameter in [`train.py`](train.py).
 
-Neuronale Netze arbeiten mit Zahlen, nicht mit Text. Der erste Schritt ist daher die **Tokenisierung**: Jedes Zeichen wird einer eindeutigen Ganzzahl zugeordnet.
+### 2.1 Character-Level-Tokenizer
 
-Dieses Modell verwendet einen **Character-Level Tokenizer** (implementiert in [`train.py`](train.py)):
+Der [`CharTokenizer`](tokenizer.py:61) ist der einfachste mögliche Ansatz: **jedes Zeichen = ein Token**.
 
 ```python
 # Alle einzigartigen Zeichen im Training-Text sammeln und sortieren
@@ -67,13 +71,87 @@ stoi  = {ch: i for i, ch in enumerate(chars)}   # str → int  ("A" → 12)
 itos  = {i: ch for i, ch in enumerate(chars)}   # int → str  (12 → "A")
 ```
 
-> **Beispiel:** `"Hund"` → `[23, 44, 31, 12]`  
+> **Beispiel:** `"Hund"` → `[23, 44, 31, 12]`
 > Die konkreten Zahlen hängen vom Training-Text ab.
 
-**Vorteil:** Sehr einfach, kein Vorverarbeitungsschritt.  
-**Nachteil:** Das Modell muss Wörter Buchstabe für Buchstabe lernen. Größere Modelle (GPT-4 etc.) verwenden Subword-Tokenizer (BPE/tiktoken), die ganze Silben oder Wörter als ein Token kodieren.
+**Vorteile:**
+- Extrem einfach, kein Trainingsschritt nötig
+- Kleines Vokabular (Anzahl einzigartiger Zeichen, typisch 60–150)
+- Kann jede Zeichenfolge enkodieren – keine unbekannten Token
 
-### 2.2 Token-Embedding
+**Nachteile:**
+- Das Modell muss Wörter **Buchstabe für Buchstabe** lernen
+- Lange Sequenzen: `"Transformer"` belegt 11 Token statt 1–3
+- Das begrenzte Kontextfenster (`block_size`) wird von einzelnen Zeichen aufgebraucht
+
+---
+
+### 2.2 BPE-Tokenizer (Byte Pair Encoding)
+
+Der [`BPETokenizer`](tokenizer.py:98) ist der Industriestandard (verwendet von GPT-2, GPT-4, LLaMA u. a.). Er lernt **Subword-Tokens** aus dem Training-Text: häufige Zeichenkombinationen werden zu einem einzigen Token zusammengefasst.
+
+#### Der Algorithmus in drei Schritten
+
+```
+Ausgangspunkt: Zeichenfolge  →  "d", "i", "e", " ", "K", "a", "t", "z", "e"
+
+Schritt 1 – Startvokabular:   alle einzigartigen Zeichen   (wie CharTokenizer)
+Schritt 2 – Häufigstes Paar:  ("K","a") kommt 847-mal vor → neues Token "Ka"
+Schritt 3 – Ersetzen:         "Ka", "t", "z", "e"
+             → weiter bis vocab_size erreicht ist
+```
+
+Die Implementierung in [`BPETokenizer.train()`](tokenizer.py:131) arbeitet **wortbasiert** für Effizienz: statt den gesamten Text als flache Zeichenfolge zu verwalten, werden zuerst Wort-Häufigkeiten gezählt und Merges auf diesen kompakten Wort-Repräsentationen durchgeführt. Das reduziert die Komplexität von O(`vocab_size × gesamt_zeichen`) auf O(`vocab_size × einzigartige_wörter`).
+
+```python
+# Vereinfachtes Beispiel aus BPETokenizer.train():
+while len(stoi) < vocab_size:
+    pair_counts = get_pair_counts(word_freq)          # häufigstes Paar suchen
+    best = max(pair_counts, key=pair_counts.get)      # z.B. ("t", "h") → "th"
+    stoi["th"] = new_id                               # ins Vokabular aufnehmen
+    merges.append(best)                               # Merge-Reihenfolge merken
+    word_freq = apply_merge(word_freq, best)          # alle Wörter aktualisieren
+```
+
+Beim **Enkodieren** werden dieselben Merges in derselben Reihenfolge auf den Text angewendet (siehe [`BPETokenizer.encode()`](tokenizer.py:222)).
+
+**Vorteile:**
+- **Komprimiert** Sequenzen stark: `"der"` → 1 Token statt 3
+- Häufige Wörter bekommen eigene Tokens, seltene werden in bekannte Subwords zerlegt
+- Das Kontextfenster nutzt semantisch reichhaltigere Einheiten
+- Typische Kompressionsrate: 3–5× gegenüber Zeichenebene
+
+**Nachteile:**
+- Erfordert einen **Trainingsschritt** (dauert einige Sekunden bis Minuten)
+- Vokabular und Merges müssen zusammen mit dem Modell gespeichert werden
+- Etwas komplexere Implementierung
+
+#### Visueller Vergleich: dasselbe Wort mit beiden Tokenizern
+
+```
+Text:  "Transformer"
+
+CharTokenizer  →  11 Tokens:  ["T","r","a","n","s","f","o","r","m","e","r"]
+
+BPETokenizer   →   3 Tokens:  ["Trans","form","er"]
+(bei vocab_size=2000, nach Training auf deutschem Wikipedia-Text)
+```
+
+#### Gegenüberstellung
+
+| Eigenschaft           | CharTokenizer            | BPETokenizer                    |
+|-----------------------|--------------------------|---------------------------------|
+| Vokabulargröße        | ~60–150 (fest)           | konfigurierbar (Standard: 2000) |
+| Trainingsschritt      | keiner                   | ja (wenige Sekunden–Minuten)    |
+| Tokens pro Wort       | viele (1 pro Zeichen)    | wenige (1–3 Subwords)           |
+| Kontextnutzung        | ineffizient              | effizient                       |
+| Unbekannte Zeichen    | werden übersprungen      | werden übersprungen             |
+| Geeignet für          | Experimente, Debugging   | realistisches Training          |
+| Aktivierung           | `--tokenizer char`       | `--tokenizer bpe` (Standard)    |
+
+---
+
+### 2.3 Token-Embedding
 
 Ein Embedding ist eine **Lookup-Tabelle**: Für jeden der `vocab_size` Token-Typen gibt es einen lernbaren Vektor der Größe `n_embd`. 
 
@@ -92,7 +170,7 @@ self.token_embedding = nn.Embedding(vocab_size, n_embd)
 
 Am Anfang des Trainings sind diese Vektoren zufällig. Durch das Training lernt das Modell, ähnliche Zeichen/Muster mit ähnlichen Vektoren zu repräsentieren.
 
-### 2.3 Positions-Embedding
+### 2.4 Positions-Embedding
 
 Attention-Operationen an sich sind **positionsunabhängig** – `q @ k.T` produziert das gleiche Ergebnis, egal ob Token A vor oder nach Token B steht. Um die Reihenfolge der Zeichen zu erhalten, wird ein zusätzliches **Positions-Embedding** addiert:
 
@@ -582,7 +660,8 @@ flowchart LR
 
     subgraph CORE["Kern-Code"]
         MODEL["model.py\nTransformer-Architektur\nHead, MultiHeadAttention\nFeedForward, Block\nMiniTransformer"]
-        TRAIN["train.py\nTokenizer, Batching\nTrainingsschleife\nEvaluierung, Speichern"]
+        TOK["tokenizer.py\nCharTokenizer (Zeichen-Level)\nBPETokenizer (Subword)"]
+        TRAIN["train.py\nBatching, Trainingsschleife\nEvaluierung, Speichern"]
         GEN["generate.py\nText-Generierung\naus Checkpoint"]
     end
 
@@ -591,12 +670,15 @@ flowchart LR
     end
 
     TXT --> TRAIN
+    TOK --> TRAIN
     MODEL --> TRAIN
     TRAIN --> CKPT
     CKPT --> GEN
     MODEL --> GEN
+    TOK --> GEN
 
     style MODEL fill:#dbeafe,stroke:#3b82d4
+    style TOK fill:#fef9c3,stroke:#ca8a04
     style TRAIN fill:#f0fdf4,stroke:#22c55e
     style GEN fill:#f0fdf4,stroke:#22c55e
 ```
@@ -605,4 +687,5 @@ flowchart LR
 
 - **Original Paper:** [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
 - **GPT-Stil Decoder-Only:** [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) (GPT-2, 2019)
+- **BPE-Originalarbeit:** [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909) (Sennrich et al., 2016)
 - **Ausgezeichnete Video-Einführung:** Andrej Karpathys "Let's build GPT from scratch" (YouTube) – dieser Code folgt einem ähnlichen Ansatz

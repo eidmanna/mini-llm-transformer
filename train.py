@@ -51,7 +51,7 @@ CONFIG = {
     # ── Trainings-Dauer ────────────────────────────────────────────────────
     #   Erhöhe max_iters für längeres Training.
     #   Auf Intel-Mac-CPU: 3000 ≈ 5 Min | 6000 ≈ 10 Min
-    "max_iters": 8000,
+    "max_iters": 6000,
 
     # ── Lernrate ───────────────────────────────────────────────────────────
     #   Zu hoch → Training explodiert, zu niedrig → zu langsam.
@@ -79,14 +79,14 @@ CONFIG = {
     #             Typisch: n_embd=64 → n_heads=4 | n_embd=128 → n_heads=8
     #   n_layers: Anzahl gestapelter Transformer-Blöcke (Tiefe des Modells)
     #             1 = sehr flach, 4 = Standard für Mini-Modelle, 6 = tiefer
-    "n_embd":   128,
-    "n_heads":  8,
-    "n_layers": 6,
+    "n_embd":   96,
+    "n_heads":  6,
+    "n_layers": 4,
 
     # ── Regularisierung ────────────────────────────────────────────────────
     #   Dropout verhindert Überanpassung. Bei kleinen Daten eher niedrig halten.
     #   Empfehlung: 0.0 (aus) | 0.1 (leicht) | 0.2 (Standard)
-    "dropout": 0.1,
+    "dropout": 0.2,
 
     # ── Text-Generierung ───────────────────────────────────────────────────
     #   Startwort für die Zwischen-Generierung während des Trainings.
