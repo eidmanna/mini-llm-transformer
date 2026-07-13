@@ -16,6 +16,7 @@ import os
 import time
 import torch
 from model import MiniTransformer
+from tokenizer import build_tokenizer, Tokenizer
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ░░  EXPERIMENTIER-ZENTRALE – Hier kannst du alle Werte verändern  ░░
@@ -24,8 +25,19 @@ CONFIG = {
     # ── Daten ──────────────────────────────────────────────────────────────
     "data_path": "data/training_text.txt",
 
+    # ── Tokenizer ──────────────────────────────────────────────────────────
+    #   "bpe"  → Byte Pair Encoding: lernt Subword-Tokens (empfohlen)
+    #   "char" → Zeichen-Level: jedes Zeichen = ein Token (wie bisher)
+    "tokenizer": "bpe",
+
+    #   Vokabular-Größe für BPE (wird bei "char" ignoriert).
+    #   Empfehlung: 500 (minimal) | 2000 (Standard) | 4000 (größer/langsamer)
+    #   Faustregel: ~1 Merge-Step pro ~200 Zeichen Trainingstext
+    "bpe_vocab_size": 2000,
+
     # ── Kontextlänge ───────────────────────────────────────────────────────
-    #   Wie viele Zeichen das Modell gleichzeitig als Kontext bekommt.
+    #   Wie viele TOKENS das Modell gleichzeitig als Kontext bekommt.
+    #   Mit BPE entspricht 1 Token ~2-4 Zeichen → effektiv mehr Kontext.
     #   Kleiner → schneller, aber weniger Zusammenhang.
     #   Empfehlung: 32 (schnell) | 64 (Standard) | 128 (langsamer, besser)
     "block_size": 128,
@@ -102,25 +114,6 @@ def load_text(path: str) -> str:
         return f.read()
 
 
-def build_vocab(text: str) -> tuple[dict, dict, int]:
-    """
-    Character-Level Tokenizer.
-    Gibt zurück: (char→int, int→char, vocab_size)
-    """
-    chars = sorted(set(text))
-    stoi  = {ch: i for i, ch in enumerate(chars)}
-    itos  = {i: ch for i, ch in enumerate(chars)}
-    return stoi, itos, len(chars)
-
-
-def encode(text: str, stoi: dict) -> list[int]:
-    return [stoi[c] for c in text]
-
-
-def decode(ids: list[int], itos: dict) -> str:
-    return "".join(itos[i] for i in ids)
-
-
 def get_batch(
     data: torch.Tensor,
     block_size: int,
@@ -166,8 +159,7 @@ def estimate_loss(
 def generate_sample(
     model: MiniTransformer,
     start_text: str,
-    stoi: dict,
-    itos:  dict,
+    tokenizer: Tokenizer,
     max_tokens: int,
     temperature: float,
     top_k: int | None,
@@ -175,8 +167,7 @@ def generate_sample(
 ) -> str:
     """Einen kurzen Text aus dem Modell generieren."""
     model.eval()
-    # Startwort codieren (unbekannte Zeichen überspringen)
-    start_ids = [stoi[c] for c in start_text if c in stoi]
+    start_ids = tokenizer.encode(start_text)
     if not start_ids:
         start_ids = [0]
     context = torch.tensor([start_ids], dtype=torch.long)
@@ -184,7 +175,7 @@ def generate_sample(
         context = context.to(device)
     generated = model.generate(context, max_tokens, temperature, top_k)
     model.train()
-    return decode(generated[0].tolist(), itos)
+    return tokenizer.decode(generated[0].tolist())
 
 
 def format_duration(seconds: float) -> str:
@@ -202,8 +193,10 @@ def main() -> None:
     # ── Reproduzierbarkeit ──────────────────────────────────────────────────
     torch.manual_seed(cfg["seed"])
 
-    # ── Gerät automatisch erkennen: MPS (Apple Silicon) → CPU ──────────────
-    if torch.backends.mps.is_available():
+    # ── Gerät automatisch erkennen: CUDA → MPS (Apple Silicon) → CPU ───────
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
@@ -212,18 +205,34 @@ def main() -> None:
     print(f"{'═'*65}")
     print(f"  Gerät          : {device}")
 
-    # ── Daten laden & Vokabular bauen ───────────────────────────────────────
+    # ── Daten laden & Tokenizer trainieren ─────────────────────────────────
     text = load_text(cfg["data_path"])
-    stoi, itos, vocab_size = build_vocab(text)
-    data = torch.tensor(encode(text, stoi), dtype=torch.long)
+
+    print(f"  Datei          : {cfg['data_path']}")
+    print(f"  Zeichen gesamt : {len(text):,}")
+    print(f"  Tokenizer      : {cfg['tokenizer'].upper()}", end="")
+    if cfg["tokenizer"] == "bpe":
+        print(f"  (Ziel-Vokabular: {cfg['bpe_vocab_size']} Tokens)")
+    else:
+        print()
+
+    tokenizer = build_tokenizer(
+        text,
+        mode       = cfg["tokenizer"],
+        vocab_size = cfg["bpe_vocab_size"],
+        verbose    = True,
+    )
+    vocab_size = tokenizer.vocab_size
+    data = torch.tensor(tokenizer.encode(text), dtype=torch.long)
 
     n_train = int(len(data) * cfg["train_split"])
     train_data = data[:n_train]
     val_data   = data[n_train:]
 
-    print(f"  Datei          : {cfg['data_path']}")
-    print(f"  Zeichen gesamt : {len(text):,}")
-    print(f"  Vokabular-Größe: {vocab_size} eindeutige Zeichen")
+    compression = len(text) / len(data) if cfg["tokenizer"] == "bpe" else 1.0
+    print(f"  Vokabular-Größe: {vocab_size} Tokens")
+    if cfg["tokenizer"] == "bpe":
+        print(f"  Kompression    : {compression:.2f}x  ({len(text):,} Zeichen → {len(data):,} Tokens)")
     print(f"  Train-Tokens   : {len(train_data):,}  |  Val-Tokens: {len(val_data):,}")
 
     # ── Modell initialisieren ───────────────────────────────────────────────
@@ -291,7 +300,7 @@ def main() -> None:
             sample_text = generate_sample(
                 model,
                 cfg["gen_start_text"],
-                stoi, itos,
+                tokenizer,
                 cfg["gen_max_tokens"],
                 cfg["gen_temperature"],
                 cfg["gen_top_k"],
@@ -344,7 +353,7 @@ def main() -> None:
     long_sample = generate_sample(
         model,
         cfg["gen_start_text"],
-        stoi, itos,
+        tokenizer,
         max_tokens  = 200,
         temperature = cfg["gen_temperature"],
         top_k       = cfg["gen_top_k"],
@@ -360,8 +369,7 @@ def main() -> None:
             "model_state_dict": model.state_dict(),
             "config":           cfg,
             "vocab_size":       vocab_size,
-            "stoi":             stoi,
-            "itos":             itos,
+            "tokenizer":        tokenizer.state(),
         },
         save_path,
     )

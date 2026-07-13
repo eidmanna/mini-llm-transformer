@@ -10,6 +10,7 @@ Verwendung:
 import argparse
 import torch
 from model import MiniTransformer
+from tokenizer import Tokenizer
 
 
 def main() -> None:
@@ -38,12 +39,11 @@ def main() -> None:
 
     # ── Checkpoint laden ───────────────────────────────────────────────────
     print(f"\nLade Checkpoint: {args.checkpoint}")
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
 
     cfg        = checkpoint["config"]
     vocab_size = checkpoint["vocab_size"]
-    stoi       = checkpoint["stoi"]
-    itos       = checkpoint["itos"]
+    tokenizer  = Tokenizer.from_state(checkpoint["tokenizer"])
 
     # ── Modell aufbauen & Gewichte laden ───────────────────────────────────
     model = MiniTransformer(
@@ -58,18 +58,19 @@ def main() -> None:
     model.eval()
 
     n_params = sum(p.numel() for p in model.parameters())
+    tok_mode = cfg.get("tokenizer", "char")
     print(f"Modell geladen  – {n_params:,} Parameter")
-    print(f"Vokabular-Größe – {vocab_size} Zeichen")
-    print(f"Startext        – \"{args.start}\"")
+    print(f"Tokenizer       – {tok_mode.upper()}  (Vokabular: {vocab_size} Tokens)")
+    print(f"Starttext       – \"{args.start}\"")
     print(f"Tokens          – {args.tokens}")
     print(f"Temperature     – {args.temperature}")
     print(f"Top-K           – {args.top_k}")
     print(f"\n{'─' * 60}\n")
 
-    # ── Starttext kodieren (unbekannte Zeichen überspringen) ───────────────
-    start_ids = [stoi[c] for c in args.start if c in stoi]
+    # ── Starttext kodieren ─────────────────────────────────────────────────
+    start_ids = tokenizer.encode(args.start)
     if not start_ids:
-        print(f"Warnung: kein Zeichen aus \"{args.start}\" im Vokabular – nutze erstes Zeichen.")
+        print(f"Warnung: kein Token aus \"{args.start}\" im Vokabular – nutze erstes Token.")
         start_ids = [0]
 
     context = torch.tensor([start_ids], dtype=torch.long)
@@ -78,7 +79,7 @@ def main() -> None:
     with torch.no_grad():
         output = model.generate(context, args.tokens, args.temperature, args.top_k)
 
-    result = "".join(itos[i] for i in output[0].tolist())
+    result = tokenizer.decode(output[0].tolist())
     print(result)
     print(f"\n{'─' * 60}\n")
 
