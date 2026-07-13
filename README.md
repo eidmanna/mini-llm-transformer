@@ -25,13 +25,17 @@ Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den ak
 ├── pyproject.toml          # Projekt-Konfiguration & Abhängigkeiten (uv)
 ├── model.py                # Transformer-Architektur (kommentiert)
 ├── train.py                # Trainings-Schleife + EXPERIMENTIER-ZENTRALE
-├── USAGE.md                # Ausführliche Bedienungsanleitung
+├── ARCHITECTURE.md         # Ausführliche Architektur-Dokumentation (mit Diagrammen)
+├── USAGE.md                # Bedienungsanleitung & Experimente
 └── data/
     └── training_text.txt   # Deutschsprachiger Trainingstext (~5.300 Zeichen)
 ```
 
 ---
 
-## Weiterführend
+## Dokumentation
 
-Alle Details zur Bedienung, Hyperparametern, Architektur und Experimenten findest du in der **[USAGE.md](USAGE.md)**.
+| Dokument | Inhalt |
+|---|---|
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ausführliche Erklärung der gesamten Transformer-Architektur mit Mermaid-Diagrammen – ideal für Einsteiger |
+| **[USAGE.md](USAGE.md)** | Bedienungsanleitung, Hyperparameter-Tipps und Experimente |
