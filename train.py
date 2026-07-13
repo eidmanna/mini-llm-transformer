@@ -28,7 +28,7 @@ CONFIG = {
     #   Wie viele Zeichen das Modell gleichzeitig als Kontext bekommt.
     #   Kleiner → schneller, aber weniger Zusammenhang.
     #   Empfehlung: 32 (schnell) | 64 (Standard) | 128 (langsamer, besser)
-    "block_size": 64,
+    "block_size": 128,
 
     # ── Batch-Größe ────────────────────────────────────────────────────────
     #   Wie viele Textausschnitte gleichzeitig verarbeitet werden.
@@ -74,7 +74,7 @@ CONFIG = {
     # ── Regularisierung ────────────────────────────────────────────────────
     #   Dropout verhindert Überanpassung. Bei kleinen Daten eher niedrig halten.
     #   Empfehlung: 0.0 (aus) | 0.1 (leicht) | 0.2 (Standard)
-    "dropout": 0.1,
+    "dropout": 0.2,
 
     # ── Text-Generierung ───────────────────────────────────────────────────
     #   Startwort für die Zwischen-Generierung während des Trainings.
@@ -125,11 +125,14 @@ def get_batch(
     data: torch.Tensor,
     block_size: int,
     batch_size: int,
+    device: torch.device | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Zufällige Batch-Ausschnitte aus den Daten laden."""
     ix = torch.randint(len(data) - block_size, (batch_size,))
     x  = torch.stack([data[i     : i + block_size    ] for i in ix])
     y  = torch.stack([data[i + 1 : i + block_size + 1] for i in ix])
+    if device is not None:
+        x, y = x.to(device), y.to(device)
     return x, y
 
 
@@ -141,6 +144,7 @@ def estimate_loss(
     block_size: int,
     batch_size: int,
     eval_batches: int = 20,
+    device: torch.device | None = None,
 ) -> dict[str, float]:
     """
     Durchschnittlichen Loss auf Train- und Val-Split schätzen.
@@ -151,7 +155,7 @@ def estimate_loss(
     for split, data in [("train", train_data), ("val", val_data)]:
         batch_losses = []
         for _ in range(eval_batches):
-            x, y = get_batch(data, block_size, batch_size)
+            x, y = get_batch(data, block_size, batch_size, device)
             _, loss = model(x, y)
             batch_losses.append(loss.item())
         losses[split] = sum(batch_losses) / len(batch_losses)
@@ -167,6 +171,7 @@ def generate_sample(
     max_tokens: int,
     temperature: float,
     top_k: int | None,
+    device: torch.device | None = None,
 ) -> str:
     """Einen kurzen Text aus dem Modell generieren."""
     model.eval()
@@ -175,6 +180,8 @@ def generate_sample(
     if not start_ids:
         start_ids = [0]
     context = torch.tensor([start_ids], dtype=torch.long)
+    if device is not None:
+        context = context.to(device)
     generated = model.generate(context, max_tokens, temperature, top_k)
     model.train()
     return decode(generated[0].tolist(), itos)
@@ -195,8 +202,11 @@ def main() -> None:
     # ── Reproduzierbarkeit ──────────────────────────────────────────────────
     torch.manual_seed(cfg["seed"])
 
-    # ── Gerät (immer CPU für Intel-Mac) ────────────────────────────────────
-    device = torch.device("cpu")
+    # ── Gerät automatisch erkennen: MPS (Apple Silicon) → CPU ──────────────
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     print(f"\n{'═'*65}")
     print("  Mini-Transformer – Lernexperiment")
     print(f"{'═'*65}")
@@ -275,6 +285,7 @@ def main() -> None:
             losses = estimate_loss(
                 model, train_data, val_data,
                 cfg["block_size"], cfg["batch_size"],
+                device=device,
             )
 
             sample_text = generate_sample(
@@ -284,6 +295,7 @@ def main() -> None:
                 cfg["gen_max_tokens"],
                 cfg["gen_temperature"],
                 cfg["gen_top_k"],
+                device=device,
             )
 
             print(f"{'─'*65}")
@@ -300,7 +312,7 @@ def main() -> None:
             print(f"\n  ▶ Generierter Text:\n  {sample_text!r}\n")
 
         # ── Einen Trainings-Schritt ────────────────────────────────────────
-        x, y = get_batch(train_data, cfg["block_size"], cfg["batch_size"])
+        x, y = get_batch(train_data, cfg["block_size"], cfg["batch_size"], device)
         _, loss = model(x, y)
 
         optimizer.zero_grad(set_to_none=True)
@@ -320,6 +332,7 @@ def main() -> None:
         model, train_data, val_data,
         cfg["block_size"], cfg["batch_size"],
         eval_batches=50,
+        device=device,
     )
     print(f"  Finaler Train-Loss : {final_losses['train']:.4f}")
     print(f"  Finaler Val-Loss   : {final_losses['val']:.4f}")
@@ -335,6 +348,7 @@ def main() -> None:
         max_tokens  = 200,
         temperature = cfg["gen_temperature"],
         top_k       = cfg["gen_top_k"],
+        device      = device,
     )
     print(f"  {long_sample!r}")
     print(f"{'═'*65}\n")
