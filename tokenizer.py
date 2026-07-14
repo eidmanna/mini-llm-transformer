@@ -20,6 +20,7 @@ Verwendung:
 """
 
 from __future__ import annotations
+import heapq
 from collections import defaultdict
 
 
@@ -149,22 +150,36 @@ class BPETokenizer(Tokenizer):
         if verbose:
             print(f"  BPE-Training: Startvokabular {len(stoi)} Zeichen → Ziel {vocab_size} Tokens")
 
-        # ── Schritt 2: Wörter tokenisieren (Zeichen + Wortende-Marker) ─────
-        # Wort = Folge von Nicht-Leerzeichen; Wortende als separates Zeichen
+        # ── Schritt 2: Wörter tokenisieren ────────────────────────────────
         word_pattern = re.compile(r"\S+")
         word_freq: dict[tuple[str, ...], int] = defaultdict(int)
         for m in word_pattern.finditer(text):
-            word = tuple(m.group())   # ("H","a","l","l","o")
-            word_freq[word] += 1
+            word_freq[tuple(m.group())] += 1
 
-        def get_pair_counts(
-            wf: dict[tuple[str, ...], int]
-        ) -> dict[tuple[str, str], int]:
-            counts: dict[tuple[str, str], int] = defaultdict(int)
-            for word, freq in wf.items():
-                for a, b in zip(word, word[1:]):
-                    counts[(a, b)] += freq
-            return counts
+        # ── Inkrementeller Pair-Count-Index ───────────────────────────────
+        # pair_counts[pair]  = aktueller Gesamtcount (kann veraltet sein im Heap)
+        # pair_to_words[pair] = set aller Wörter (als Index in word_list), die
+        #                       dieses Paar enthalten
+        # Heap: max-heap via negative counts → (-count, pair)
+        pair_counts: dict[tuple[str, str], int] = defaultdict(int)
+        pair_to_words: dict[tuple[str, str], set] = defaultdict(set)
+
+        # Stabile Wortliste – Wörter werden nie gelöscht, nur ersetzt
+        word_list: list[tuple[str, ...] | None] = list(word_freq.keys())
+        # word_index: aktuelles Tupel → Index in word_list
+        word_index: dict[tuple[str, ...], int] = {w: i for i, w in enumerate(word_list)}
+
+        for idx, word in enumerate(word_list):
+            freq = word_freq[word]
+            for a, b in zip(word, word[1:]):
+                pair_counts[(a, b)] += freq
+                pair_to_words[(a, b)].add(idx)
+
+        # Heap: Einträge können veraltet sein → lazy removal via Gegencheck
+        heap: list[tuple[int, tuple[str, str]]] = [
+            (-cnt, pair) for pair, cnt in pair_counts.items()
+        ]
+        heapq.heapify(heap)
 
         def merge_word(
             word: tuple[str, ...], a: str, b: str, ab: str
@@ -180,15 +195,18 @@ class BPETokenizer(Tokenizer):
                     i += 1
             return tuple(new)
 
-        # ── Schritt 3: Merge-Iterationen ───────────────────────────────────
+        # ── Schritt 3: Merge-Iterationen (inkrementell) ───────────────────
         while len(stoi) < vocab_size:
-            pair_counts = get_pair_counts(word_freq)
-            if not pair_counts:
-                break
+            # Bestes Paar aus Heap holen (veraltete Einträge überspringen)
+            best_pair = None
+            while heap:
+                neg_cnt, pair = heapq.heappop(heap)
+                if pair_counts.get(pair, 0) == -neg_cnt:
+                    best_pair = pair
+                    best_count = -neg_cnt
+                    break
 
-            best_pair  = max(pair_counts, key=lambda p: pair_counts[p])
-            best_count = pair_counts[best_pair]
-            if best_count < 2:
+            if best_pair is None or best_count < 2:
                 break
 
             a, b      = best_pair
@@ -198,12 +216,54 @@ class BPETokenizer(Tokenizer):
             itos[new_id]    = new_token
             merges.append((a, b))
 
-            # Wort-Frequenz-Tabelle aktualisieren
-            new_word_freq: dict[tuple[str, ...], int] = {}
-            for word, freq in word_freq.items():
-                new_word = merge_word(word, a, b, new_token)
-                new_word_freq[new_word] = new_word_freq.get(new_word, 0) + freq
-            word_freq = new_word_freq
+            # Nur die Wörter aktualisieren, die das Paar (a, b) enthalten
+            affected_indices = list(pair_to_words.get(best_pair, set()))
+            for idx in affected_indices:
+                old_word = word_list[idx]
+                if old_word is None:
+                    continue
+                freq = word_freq.get(old_word, 0)
+                if freq == 0:
+                    continue
+
+                new_word = merge_word(old_word, a, b, new_token)
+                if new_word == old_word:
+                    continue
+
+                # Altes Wort aus Datenstrukturen entfernen
+                del word_freq[old_word]
+                word_list[idx] = None  # Slot als verwaist markieren
+
+                # Pair-Counts für das alte Wort dekrementieren
+                for x, y in zip(old_word, old_word[1:]):
+                    pair_counts[(x, y)] -= freq
+                    pair_to_words[(x, y)].discard(idx)
+
+                # Neues Wort einfügen oder mit vorhandenem zusammenführen
+                if new_word in word_index:
+                    existing_idx = word_index[new_word]
+                    word_freq[new_word] = word_freq.get(new_word, 0) + freq
+                    # Pair-Counts für das neue Wort inkrementieren
+                    for x, y in zip(new_word, new_word[1:]):
+                        pair_counts[(x, y)] += freq
+                        pair_to_words[(x, y)].add(existing_idx)
+                else:
+                    new_idx = len(word_list)
+                    word_list.append(new_word)
+                    word_index[new_word] = new_idx
+                    word_freq[new_word] = freq
+                    for x, y in zip(new_word, new_word[1:]):
+                        pair_counts[(x, y)] += freq
+                        pair_to_words[(x, y)].add(new_idx)
+                        heapq.heappush(heap, (-pair_counts[(x, y)], (x, y)))
+
+                # Geänderte Pair-Counts in Heap pushen
+                for x, y in zip(new_word, new_word[1:]):
+                    heapq.heappush(heap, (-pair_counts[(x, y)], (x, y)))
+
+            # best_pair-Count aktualisieren (kann durch obige Schleife bereits 0 sein)
+            if pair_counts.get(best_pair, 0) > 0:
+                heapq.heappush(heap, (-pair_counts[best_pair], best_pair))
 
             if verbose and len(stoi) % 200 == 0:
                 print(f"    Vokabular: {len(stoi):>5} Tokens  (letztes Merge: {new_token!r})")
