@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Vektor · Matrix · Tensor — ein visueller Crashkurs</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 32px 16px 56px;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  h2 { font-size: 16px; font-weight: 700; margin: 36px 0 8px; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; }
+  h3 { font-size: 14px; font-weight: 700; margin: 20px 0 6px; color: #3b82d4; }
+  p  { margin-bottom: 10px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  pre {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 10px 0 18px;
+    line-height: 1.8;
+    white-space: pre;
+  }
+  .comment { color: #57606a; }
+  .hl { color: #3b82d4; font-weight: 700; }
+  .hl2 { color: #7c5cd8; font-weight: 700; }
+  .hl3 { color: #16a34a; font-weight: 700; }
+
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 32px 0; }
+
+  /* box layouts */
+  .row { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .box {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 16px;
+    flex: 1 1 200px;
+  }
+  .box-title { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+
+  /* formula box */
+  .formula-box {
+    background: #f7f8fa;
+    border-left: 3px solid #3b82d4;
+    border-radius: 0 6px 6px 0;
+    padding: 10px 16px;
+    margin: 10px 0 16px;
+    font-size: 13.5px;
+  }
+  .formula { font-size: 15px; font-weight: 700; font-family: "SFMono-Regular", Consolas, monospace; letter-spacing: .03em; margin-bottom: 4px; }
+
+  /* visual matrix tables */
+  table.mat {
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    margin: 4px auto;
+  }
+  table.mat td {
+    width: 34px; height: 30px;
+    text-align: center;
+    border: 1px solid #d0d7de;
+    background: #f7f8fa;
+  }
+  table.mat td.h1 { background: #dbeafe; color: #1e40af; font-weight: 700; }
+  table.mat td.h2 { background: #fce7f3; color: #9d174d; font-weight: 700; }
+  table.mat td.h3 { background: #d1fae5; color: #065f46; font-weight: 700; }
+  table.mat td.h4 { background: #ede9fe; color: #4c1d95; font-weight: 700; }
+  table.mat td.dim { background: #fff7ed; color: #9a3412; font-size: 11px; }
+  table.mat td.zero { color: #c0c0c0; }
+
+  .mat-wrap { text-align: center; margin: 8px 0; }
+  .mat-label { font-size: 12px; color: #57606a; font-weight: 700; margin-bottom: 4px; }
+  .mat-eq { font-size: 20px; font-weight: 300; color: #57606a; line-height: 1; padding: 0 8px; display: flex; align-items: center; }
+  .mat-row { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; margin: 12px 0; }
+
+  /* step grid */
+  .step-grid { display: grid; grid-template-columns: 28px 1fr; gap: 0 12px; margin: 12px 0; }
+  .step-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #3b82d4; color: #fff;
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px; flex-shrink: 0;
+  }
+  .step-body { padding-bottom: 16px; }
+  .step-body strong { display: block; margin-bottom: 2px; }
+
+  .note {
+    background: #fff7ed; border: 1px solid #fed7aa;
+    border-radius: 6px; padding: 10px 14px;
+    font-size: 13px; color: #92400e; margin: 10px 0;
+  }
+  .note strong { color: #7c2d12; }
+
+  .infobox {
+    background: #f0f9ff; border: 1px solid #bae6fd;
+    border-radius: 6px; padding: 10px 14px;
+    font-size: 13px; color: #0c4a6e; margin: 10px 0;
+  }
+  .infobox strong { color: #075985; }
+
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px; margin-right: 4px;
+  }
+  .tag-v { background: #dbeafe; color: #1e40af; }
+  .tag-m { background: #fce7f3; color: #9d174d; }
+  .tag-t { background: #d1fae5; color: #065f46; }
+
+  /* toc */
+  .toc { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 32px; }
+  .toc-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+  .toc a { color: #3b82d4; text-decoration: none; display: block; font-size: 13px; line-height: 2; }
+  .toc a:hover { text-decoration: underline; }
+
+  footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #57606a; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Vektor · Matrix · Tensor</h1>
+  <p class="subtitle">Ein visueller Crashkurs für Machine-Learning &amp; Transformer — keine Vorkenntnisse nötig</p>
+
+  <div class="toc">
+    <div class="toc-title">Inhalt</div>
+    <a href="#skalare">0 · Skalare — das Fundament</a>
+    <a href="#vektoren">1 · Vektoren — Richtung &amp; Größe</a>
+    <a href="#matrizen">2 · Matrizen — Tabellen von Zahlen</a>
+    <a href="#matmul">3 · Matrixmultiplikation — das Herzstück</a>
+    <a href="#tensoren">4 · Tensoren — Matrizen in 3D+</a>
+    <a href="#transformer">5 · Im Transformer konkret</a>
+  </div>
+
+  <!-- ════════════════════════════════════════════════ 0 SKALARE -->
+  <h2 id="skalare">0 · Skalare — eine einzelne Zahl</h2>
+  <p>
+    Ein <strong>Skalar</strong> ist einfach eine einzelne reelle Zahl. Alle anderen Strukturen bauen darauf auf.
+  </p>
+  <div class="row">
+    <div class="box"><div class="box-title">Beispiele</div>
+      Lernrate: <code>0.001</code><br>
+      Temperatur: <code>1.4</code><br>
+      Attention-Score: <code>3.7</code>
+    </div>
+    <div class="box"><div class="box-title">In PyTorch</div>
+      <code>torch.tensor(3.7)</code><br>
+      Form: <code>()</code> — nulldimensional<br>
+      <span class="comment" style="font-size:12px;">kein Batch, kein Vektor</span>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════ 1 VEKTOREN -->
+  <h2 id="vektoren">1 · Vektoren — eine Liste von Zahlen</h2>
+  <p>
+    Ein <strong>Vektor</strong> ist eine geordnete Liste von Skalaren. Er hat eine Dimension (Länge) <code>n</code>.
+    In ML ist jedes Token nach dem Embedding ein Vektor.
+  </p>
+
+  <h3>Visuelle Vorstellung</h3>
+  <p>Ein Vektor der Länge 4 kann man sich als eine Zeile oder Spalte vorstellen:</p>
+  <div class="mat-row">
+    <div class="mat-wrap">
+      <div class="mat-label">Zeilenvektor (1 × 4)</div>
+      <table class="mat">
+        <tr>
+          <td class="h1">1.2</td><td class="h2">0.5</td><td class="h3">−0.8</td><td class="h4">2.1</td>
+        </tr>
+      </table>
+    </div>
+    <div class="mat-eq">=</div>
+    <div class="mat-wrap">
+      <div class="mat-label">Spaltenvektor (4 × 1)</div>
+      <table class="mat">
+        <tr><td class="h1">1.2</td></tr>
+        <tr><td class="h2">0.5</td></tr>
+        <tr><td class="h3">−0.8</td></tr>
+        <tr><td class="h4">2.1</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h3>Grundoperationen</h3>
+  <div class="row">
+    <div class="box">
+      <div class="box-title">Addition (elementweise)</div>
+      <pre>[1, 2, 3]
++ [4, 5, 6]
+─────────
+= [5, 7, 9]</pre>
+      Beide Vektoren müssen <strong>gleich lang</strong> sein.
+    </div>
+    <div class="box">
+      <div class="box-title">Skalierung (Skalar × Vektor)</div>
+      <pre>2 × [1, 2, 3]
+─────────
+= [2, 4, 6]</pre>
+      Jedes Element wird mit dem Skalar multipliziert.
+    </div>
+  </div>
+
+  <h3>Skalarprodukt (Dot Product) ← besonders wichtig!</h3>
+  <div class="formula-box">
+    <div class="formula">a · b = Σ aᵢ · bᵢ = a₁b₁ + a₂b₂ + ... + aₙbₙ</div>
+    Ergebnis: <strong>ein Skalar</strong> — misst, wie ähnlich / ausgerichtet zwei Vektoren sind.
+  </div>
+  <pre>a = [1, 2, 3]   b = [4, 5, 6]
+a · b = 1×4 + 2×5 + 3×6 = 4 + 10 + 18 = <span class="hl">32</span></pre>
+
+  <div class="infobox">
+    <strong>Warum ist das so wichtig?</strong><br>
+    Wenn Query-Vektor <strong>q</strong> und Key-Vektor <strong>k</strong> eines Tokens in die gleiche Richtung zeigen
+    (ähnliche Werte), wird das Skalarprodukt groß → hoher Attention-Score → das Token wird beachtet.
+    Zeigen sie in entgegengesetzte Richtungen → negativer Wert → kaum Aufmerksamkeit.
+  </div>
+
+  <h3>Kosinus-Ähnlichkeit — normiertes Dot Product</h3>
+  <div class="formula-box">
+    <div class="formula">cos(θ) = (a · b) / (‖a‖ × ‖b‖)</div>
+    Wert zwischen −1 und +1. Bei +1: identische Richtung. Bei 0: senkrecht (unabhängig). Bei −1: gegensätzlich.
+  </div>
+
+  <!-- ════════════════════════════════════════════════ 2 MATRIZEN -->
+  <h2 id="matrizen">2 · Matrizen — ein Raster aus Zahlen</h2>
+  <p>
+    Eine <strong>Matrix</strong> ist ein 2D-Raster mit <code>m</code> Zeilen und <code>n</code> Spalten — kurz <code>m × n</code>.
+    Man kann sie sich als Stapel von Zeilenvektoren oder als Sammlung von Spaltenvektoren vorstellen.
+  </p>
+
+  <div class="mat-row">
+    <div class="mat-wrap">
+      <div class="mat-label">Matrix A (3 × 4)</div>
+      <table class="mat">
+        <tr><td class="h1">1</td><td class="h2">2</td><td class="h3">3</td><td class="h4">4</td></tr>
+        <tr><td class="h1">5</td><td class="h2">6</td><td class="h3">7</td><td class="h4">8</td></tr>
+        <tr><td class="h1">9</td><td class="h2">10</td><td class="h3">11</td><td class="h4">12</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h3>Transponieren — Zeilen und Spalten tauschen</h3>
+  <p>Die <strong>Transponierte</strong> <code>Aᵀ</code> entsteht, indem Zeilen zu Spalten werden (und umgekehrt).
+  Eine <code>(m × n)</code>-Matrix wird zu einer <code>(n × m)</code>-Matrix.</p>
+  <div class="mat-row">
+    <div class="mat-wrap">
+      <div class="mat-label">A (2 × 3)</div>
+      <table class="mat">
+        <tr><td class="h1">1</td><td class="h2">2</td><td class="h3">3</td></tr>
+        <tr><td class="h1">4</td><td class="h2">5</td><td class="h3">6</td></tr>
+      </table>
+    </div>
+    <div class="mat-eq">⟶ Aᵀ</div>
+    <div class="mat-wrap">
+      <div class="mat-label">Aᵀ (3 × 2)</div>
+      <table class="mat">
+        <tr><td class="h1">1</td><td class="h1">4</td></tr>
+        <tr><td class="h2">2</td><td class="h2">5</td></tr>
+        <tr><td class="h3">3</td><td class="h3">6</td></tr>
+      </table>
+    </div>
+  </div>
+  <p>In <code>model.py</code> passiert das bei: <code>k.transpose(-2, -1)</code> — die letzten zwei Achsen werden getauscht.</p>
+
+  <!-- ════════════════════════════════════════════════ 3 MATMUL -->
+  <h2 id="matmul">3 · Matrixmultiplikation — das Herzstück</h2>
+  <p>
+    Die Matrixmultiplikation <code>C = A @ B</code> kombiniert eine <code>(m × k)</code>-Matrix mit einer
+    <code>(k × n)</code>-Matrix zu einer <code>(m × n)</code>-Matrix.
+    <strong>Die innere Dimension muss übereinstimmen!</strong>
+  </p>
+
+  <div class="formula-box">
+    <div class="formula">C[i,j] = Zeile i von A  ·  Spalte j von B  (Skalarprodukt!)</div>
+    Jedes Element von C ist ein Skalarprodukt aus einer Zeile von A und einer Spalte von B.
+  </div>
+
+  <h3>Schritt-für-Schritt-Beispiel (2×3 @ 3×2 = 2×2)</h3>
+  <div class="mat-row">
+    <div class="mat-wrap">
+      <div class="mat-label">A (2 × 3)</div>
+      <table class="mat">
+        <tr><td class="h1">1</td><td class="h1">2</td><td class="h1">3</td></tr>
+        <tr><td class="h2">4</td><td class="h2">5</td><td class="h2">6</td></tr>
+      </table>
+    </div>
+    <div class="mat-eq">@</div>
+    <div class="mat-wrap">
+      <div class="mat-label">B (3 × 2)</div>
+      <table class="mat">
+        <tr><td class="h3">7</td><td class="h4">8</td></tr>
+        <tr><td class="h3">9</td><td class="h4">10</td></tr>
+        <tr><td class="h3">11</td><td class="h4">12</td></tr>
+      </table>
+    </div>
+    <div class="mat-eq">=</div>
+    <div class="mat-wrap">
+      <div class="mat-label">C (2 × 2)</div>
+      <table class="mat">
+        <tr><td class="h1">58</td><td class="h4">64</td></tr>
+        <tr><td class="h2">139</td><td class="h4">154</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="step-grid">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>C[0,0]: Zeile 0 von A · Spalte 0 von B</strong>
+      <code>1×7 + 2×9 + 3×11 = 7 + 18 + 33 = 58</code>
+    </div>
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>C[0,1]: Zeile 0 von A · Spalte 1 von B</strong>
+      <code>1×8 + 2×10 + 3×12 = 8 + 20 + 36 = 64</code>
+    </div>
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>C[1,0]: Zeile 1 von A · Spalte 0 von B</strong>
+      <code>4×7 + 5×9 + 6×11 = 28 + 45 + 66 = 139</code>
+    </div>
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>C[1,1]: Zeile 1 von A · Spalte 1 von B</strong>
+      <code>4×8 + 5×10 + 6×12 = 32 + 50 + 72 = 154</code>
+    </div>
+  </div>
+
+  <h3>Merkhilfe: Dimensionen</h3>
+  <pre>(m × k) @ (k × n)  =  (m × n)
+         ↑↑
+    müssen gleich sein!</pre>
+
+  <div class="note">
+    <strong>Achtung:</strong> Matrixmultiplikation ist <em>nicht kommutativ</em>: <code>A @ B ≠ B @ A</code> (i. d. R.).
+    Reihenfolge ist entscheidend!
+  </div>
+
+  <h3>Warum ist das im Transformer so zentral?</h3>
+  <p>
+    <code>nn.Linear(in, out)</code> führt intern genau eine Matrixmultiplikation durch:
+    <code>y = x @ Wᵀ</code>. Das ist das "Lernen" — die Gewichtsmatrix <code>W</code>
+    wird durch Backpropagation so angepasst, dass das Ergebnis sinnvoll wird.
+  </p>
+
+  <!-- ════════════════════════════════════════════════ 4 TENSOREN -->
+  <h2 id="tensoren">4 · Tensoren — Matrizen in mehreren Dimensionen</h2>
+  <p>
+    Ein <strong>Tensor</strong> ist eine Verallgemeinerung: Skalare (0D), Vektoren (1D) und Matrizen (2D) sind
+    alle Tensoren. Im ML-Kontext meint man mit "Tensor" meist 3D oder höher.
+  </p>
+
+  <div class="row">
+    <div class="box"><div class="box-title"><span class="tag tag-v">0D</span> Skalar</div>Form: <code>()</code><br>Beispiel: Loss-Wert <code>2.34</code></div>
+    <div class="box"><div class="box-title"><span class="tag tag-v">1D</span> Vektor</div>Form: <code>(n,)</code><br>Beispiel: ein Token-Embedding der Länge 64</div>
+    <div class="box"><div class="box-title"><span class="tag tag-m">2D</span> Matrix</div>Form: <code>(m, n)</code><br>Beispiel: Gewichtsmatrix W_Q</div>
+    <div class="box"><div class="box-title"><span class="tag tag-t">3D</span> Tensor</div>Form: <code>(B, T, C)</code><br>Beispiel: Batch von Sequenzen</div>
+  </div>
+
+  <h3>Der 3D-Tensor im Transformer: (B, T, C)</h3>
+  <p>Das ist die zentralste Form in <code>model.py</code>. Man kann ihn sich so vorstellen:</p>
+
+  <pre>Tensor x mit Form (B=2, T=3, C=4):
+
+  Batch 0:                    Batch 1:
+  ┌──────────────────┐        ┌──────────────────┐
+  │Token0: [a,b,c,d] │        │Token0: [e,f,g,h] │
+  │Token1: [a,b,c,d] │        │Token1: [e,f,g,h] │
+  │Token2: [a,b,c,d] │        │Token2: [e,f,g,h] │
+  └──────────────────┘        └──────────────────┘
+       ↑ T=3 Tokens                ↑ T=3 Tokens
+       jeder mit C=4 Werten</pre>
+
+  <div class="formula-box">
+    <div class="formula">B = Batch-Größe</div>
+    Wie viele Texte werden <em>parallel</em> verarbeitet. Kein Einfluss auf die Logik — nur Effizienz.
+  </div>
+  <div class="formula-box">
+    <div class="formula">T = Sequenzlänge (Zeitschritte)</div>
+    Wie viele Tokens (Zeichen, Wörter, …) die Sequenz hat. Max = <code>block_size</code>.
+  </div>
+  <div class="formula-box">
+    <div class="formula">C = Kanäle (n_embd)</div>
+    Die Vektordimension jedes Tokens. Größer = mehr "Ausdrucksvermögen".
+  </div>
+
+  <h3>Batched Matrix Multiplication mit @</h3>
+  <p>
+    PyTorch wendet <code>@</code> auf Tensoren "batched" an: die ersten Dimensionen werden als Batch-Achsen
+    behandelt, nur die letzten zwei werden multipliziert.
+  </p>
+  <pre>Q: (B, T, head_size)
+K: (B, T, head_size)
+
+Q @ Kᵀ = Q @ K.transpose(-2,-1)
+
+      (B, T, head_size) @ (B, head_size, T)
+                     ↑↑         ↑↑
+               innere Dims stimmen überein
+   =  (B, T, T)   ← für jedes Batch-Element: T×T Attention-Matrix</pre>
+
+  <div class="infobox">
+    <strong>PyTorch erledigt das für alle B Batch-Elemente gleichzeitig</strong> — kein manuelles Schleifenschreiben nötig.
+    Das ist "Batched MatMul".
+  </div>
+
+  <h3>Wichtige Tensor-Operationen im Transformer</h3>
+  <div class="row">
+    <div class="box">
+      <div class="box-title">reshape / view</div>
+      Form ändern ohne Daten zu kopieren.<br>
+      <code>(B*T, C) ↔ (B, T, C)</code>
+    </div>
+    <div class="box">
+      <div class="box-title">cat (Konkatenation)</div>
+      Tensoren entlang einer Achse zusammenfügen.<br>
+      <code>torch.cat([h1, h2], dim=-1)</code><br>
+      <code>(B,T,hs) + (B,T,hs) → (B,T,2hs)</code>
+    </div>
+    <div class="box">
+      <div class="box-title">elementweise Ops</div>
+      Addition, Multiplikation etc. auf gleichen Positionen.<br>
+      Broadcasting: kleinere Tensoren werden automatisch "gedehnt".
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════ 5 TRANSFORMER -->
+  <h2 id="transformer">5 · Wie alles im Transformer zusammenkommt</h2>
+  <p>
+    Hier sind die konkreten Dimensionen aus <code>model.py</code> (angenommene Werte: <code>n_embd=64, head_size=16, T=8, B=4</code>):
+  </p>
+
+  <div class="step-grid">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Token Embedding: Tabelle → Vektor</strong>
+      Jedes Token-ID (Integer) → Zeile aus der Embedding-Tabelle.<br>
+      <code>x: (4, 8, 64)</code> — 4 Sequenzen, 8 Tokens, je 64-dim Vektor.
+    </div>
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Linear (W_Q): Projektion per Matmul</strong>
+      <code>W_Q: (64, 16)</code> &nbsp;→&nbsp; <code>x @ W_Qᵀ = Q: (4, 8, 16)</code><br>
+      PyTorch rechnet das gebatcht über alle B und T gleichzeitig.
+    </div>
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Attention Scores: Q @ Kᵀ</strong>
+      <code>(4, 8, 16) @ (4, 16, 8) = (4, 8, 8)</code><br>
+      Für jedes der 4 Batch-Elemente: eine 8×8-Matrix, die sagt, wie stark Token i auf Token j achtet.
+    </div>
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Skalierung: / √head_size = / √16 = / 4</strong>
+      Skalar-Division auf dem gesamten (4,8,8)-Tensor — elementweise.
+    </div>
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Masked Fill + Softmax → Wahrscheinlichkeiten</strong>
+      Obere Dreiecke = <code>−∞</code> → nach Softmax = 0. Ergebnis: (4,8,8) mit Zeilensumme = 1.
+    </div>
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <strong>Output: wei @ V</strong>
+      <code>(4, 8, 8) @ (4, 8, 16) = (4, 8, 16)</code><br>
+      Jedes Output-Token ist eine gewichtete Summe der Value-Vektoren.
+    </div>
+  </div>
+
+  <hr>
+
+  <h2>Schnell-Referenz: Dimensionsregeln</h2>
+  <pre>Matmul:    (a, b, c) @ (a, c, d)  →  (a, b, d)   <span class="comment"># innere Dim muss stimmen</span>
+Transpose: (a, b, c).T[-2,-1]     →  (a, c, b)   <span class="comment"># letzte 2 Achsen tauschen</span>
+Cat:       (a,b,c) + (a,b,c) dim=-1  →  (a,b,2c) <span class="comment"># entlang letzter Achse stapeln</span>
+Broadcast: (a,1,c) + (1,b,c)      →  (a,b,c)     <span class="comment"># automatisches Dehnen</span></pre>
+
+  
+</div>
+</body>
+</html>

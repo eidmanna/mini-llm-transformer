@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Erklärung: Scaled Dot-Product Attention (class Head)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 32px 16px 48px;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 28px 0 8px; color: #1f2328; }
+  p { margin-bottom: 10px; color: #1f2328; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  pre {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 10px 0 18px;
+    line-height: 1.75;
+  }
+  .comment { color: #57606a; }
+  .keyword { color: #3b82d4; font-weight: 600; }
+  .fn { color: #7c5cd8; }
+  .step-grid {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 0 12px;
+    margin: 12px 0 24px;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #3b82d4;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  .step-body { padding-bottom: 18px; }
+  .step-body strong { display: block; margin-bottom: 4px; font-size: 14px; }
+  .divider { border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; }
+  .matrix-wrap {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    margin: 12px 0 20px;
+  }
+  .matrix-block { flex: 0 0 auto; }
+  .matrix-label { font-size: 12px; color: #57606a; margin-bottom: 6px; font-weight: 600; letter-spacing: .03em; }
+  table.matrix {
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  table.matrix td {
+    width: 28px; height: 28px;
+    text-align: center;
+    border: 1px solid #e5e7eb;
+    background: #f7f8fa;
+  }
+  table.matrix td.active { background: #dbeafe; color: #1e40af; font-weight: 600; }
+  table.matrix td.masked { background: #f7f8fa; color: #c0c0c0; }
+  .formula-box {
+    background: #f7f8fa;
+    border-left: 3px solid #3b82d4;
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 12px 0 18px;
+    font-size: 13.5px;
+  }
+  .formula-box .formula { font-size: 15px; font-weight: 600; letter-spacing: .02em; margin-bottom: 6px; font-family: "SFMono-Regular", Consolas, monospace; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .tag-q { background: #dbeafe; color: #1e40af; }
+  .tag-k { background: #fce7f3; color: #9d174d; }
+  .tag-v { background: #d1fae5; color: #065f46; }
+  .tag-w { background: #ede9fe; color: #4c1d95; }
+  .note {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #57606a;
+    margin: 12px 0;
+  }
+  .note strong { color: #1f2328; }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    text-align: center;
+    font-size: 12px;
+    color: #57606a;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>class Head(nn.Module) — Scaled Dot-Product Attention</h1>
+  <p class="subtitle">Datei: model.py, Zeile 27 · Ein kausaler Single-Head Attention-Mechanismus</p>
+
+  <h2>Was macht ein Attention-Head?</h2>
+  <p>
+    Ein Attention-Head entscheidet für jede Token-Position im Eingabe-Tensor, <strong>welche anderen Positionen
+    wie stark relevant sind</strong>, und erzeugt daraus einen neuen, kontextangereicherten Vektor.
+    Im Decoder-Only-Modell (GPT-Stil) darf dabei jede Position <em>nur in die Vergangenheit</em> schauen —
+    das erzwingt die kausale Maske.
+  </p>
+
+  <hr class="divider">
+
+  <h2>1. Initialisierung — <code>__init__</code></h2>
+  <p>Vier Objekte werden registriert:</p>
+
+  <pre><span class="keyword">self</span>.key   = nn.Linear(n_embd, head_size, bias=<span class="keyword">False</span>)  <span class="comment"># W_K</span>
+<span class="keyword">self</span>.query = nn.Linear(n_embd, head_size, bias=<span class="keyword">False</span>)  <span class="comment"># W_Q</span>
+<span class="keyword">self</span>.value = nn.Linear(n_embd, head_size, bias=<span class="keyword">False</span>)  <span class="comment"># W_V</span>
+
+<span class="keyword">self</span>.<span class="fn">register_buffer</span>(<span class="comment">"tril"</span>, torch.tril(torch.ones(block_size, block_size)))
+<span class="keyword">self</span>.dropout = nn.Dropout(dropout)</pre>
+
+  <div class="step-grid">
+    <div class="step-num">K</div>
+    <div class="step-body">
+      <strong><span class="tag tag-k">key</span> — "Was biete ich an?"</strong>
+      Projiziert jeden Eingabe-Vektor auf einen <code>head_size</code>-dimensionalen Key-Vektor.
+      Lernbare Gewichtsmatrix <code>W_K ∈ ℝ^(n_embd × head_size)</code>.
+    </div>
+    <div class="step-num">Q</div>
+    <div class="step-body">
+      <strong><span class="tag tag-q">query</span> — "Was suche ich?"</strong>
+      Projiziert jeden Eingabe-Vektor auf einen Query-Vektor.
+      Lernbare Gewichtsmatrix <code>W_Q ∈ ℝ^(n_embd × head_size)</code>.
+    </div>
+    <div class="step-num">V</div>
+    <div class="step-body">
+      <strong><span class="tag tag-v">value</span> — "Was gebe ich weiter?"</strong>
+      Enthält die eigentliche Information, die bei Relevanz weitergegeben wird.
+      Lernbare Gewichtsmatrix <code>W_V ∈ ℝ^(n_embd × head_size)</code>.
+    </div>
+    <div class="step-num">▽</div>
+    <div class="step-body">
+      <strong><code>tril</code> — Untere Dreiecksmatrix (nicht lernbar)</strong>
+      Ein fester Buffer (kein Gradient). Blockiert den Blick in die Zukunft.
+      <code>register_buffer</code> stellt sicher, dass er beim <code>.to(device)</code>-Aufruf mitgenommen wird.
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <h2>2. Forward-Pass — Schritt für Schritt</h2>
+
+  <pre>B, T, C = x.shape   <span class="comment"># Batch-Größe | Sequenzlänge (Zeitschritte) | Kanäle (n_embd)</span></pre>
+
+  <p>Der Eingabe-Tensor <code>x</code> hat die Form <code>(B, T, C)</code> —
+  B parallele Sequenzen, jede mit T Tokens, jedes Token als C-dimensionaler Vektor.</p>
+
+  <h2>Schritt 1 — Projektion auf Q, K, V</h2>
+  <pre>k = <span class="keyword">self</span>.key(x)    <span class="comment"># (B, T, head_size)</span>
+q = <span class="keyword">self</span>.query(x)  <span class="comment"># (B, T, head_size)</span>
+v = <span class="keyword">self</span>.value(x)  <span class="comment"># (B, T, head_size)</span></pre>
+  <p>Jedes der T Tokens bekommt einen eigenen Key-, Query- und Value-Vektor durch die gelernten Projektionen.</p>
+
+  <h2>Schritt 2 — Attention-Scores (Scaled Dot-Product)</h2>
+  <div class="formula-box">
+    <div class="formula">wei = Q · Kᵀ · (head_size)^(−½)</div>
+    Form: <code>(B, T, T)</code> — für jedes Token-Paar (i, j) ein Score
+  </div>
+  <pre>wei = q @ k.<span class="fn">transpose</span>(-2, -1) * (head_size ** -0.5)   <span class="comment"># (B, T, T)</span></pre>
+
+  <p>
+    Das Skalarprodukt von Query <em>i</em> mit Key <em>j</em> misst, wie relevant Token j für Token i ist.
+    Die Skalierung mit <code>1/√head_size</code> verhindert, dass die Werte bei großem <code>head_size</code>
+    so groß werden, dass Softmax gesättigte Gradienten produziert.
+  </p>
+
+  <h2>Schritt 3 — Kausale Maske (Decoder-Eigenschaft)</h2>
+  <pre>wei = wei.<span class="fn">masked_fill</span>(<span class="keyword">self</span>.tril[:T, :T] == 0, float(<span class="comment">"-inf"</span>))</pre>
+
+  <p>
+    Alle Positionen <em>oberhalb</em> der Hauptdiagonale (Zukunft) werden auf <code>-∞</code> gesetzt.
+    Nach Softmax werden diese zu exakt 0 — das Modell "sieht" sie nicht.
+  </p>
+
+  <div class="matrix-wrap">
+    <div class="matrix-block">
+      <div class="matrix-label">tril-Matrix (T=4) — 1 = erlaubt, 0 = geblockt</div>
+      <table class="matrix">
+        <tr><td class="active">1</td><td class="masked">0</td><td class="masked">0</td><td class="masked">0</td></tr>
+        <tr><td class="active">1</td><td class="active">1</td><td class="masked">0</td><td class="masked">0</td></tr>
+        <tr><td class="active">1</td><td class="active">1</td><td class="active">1</td><td class="masked">0</td></tr>
+        <tr><td class="active">1</td><td class="active">1</td><td class="active">1</td><td class="active">1</td></tr>
+      </table>
+    </div>
+    <div class="matrix-block">
+      <div class="matrix-label">Attention-Weights nach Maske &amp; Softmax</div>
+      <table class="matrix">
+        <tr><td class="active">1.0</td><td class="masked">0</td><td class="masked">0</td><td class="masked">0</td></tr>
+        <tr><td class="active">.6</td><td class="active">.4</td><td class="masked">0</td><td class="masked">0</td></tr>
+        <tr><td class="active">.5</td><td class="active">.3</td><td class="active">.2</td><td class="masked">0</td></tr>
+        <tr><td class="active">.4</td><td class="active">.3</td><td class="active">.2</td><td class="active">.1</td></tr>
+      </table>
+    </div>
+  </div>
+  <p class="note"><strong>Intuition:</strong> Token 0 sieht nur sich selbst. Token 3 sieht alle 4 Tokens.
+  Kein Token kann in die Zukunft schauen — das ist die autoregressive Eigenschaft des Decoders.</p>
+
+  <h2>Schritt 4 — Softmax &amp; Dropout</h2>
+  <pre>wei = F.<span class="fn">softmax</span>(wei, dim=-1)  <span class="comment"># Gewichte summieren sich pro Zeile auf 1</span>
+wei = <span class="keyword">self</span>.<span class="fn">dropout</span>(wei)         <span class="comment"># Regularisierung: zufällig Connections kappen</span></pre>
+
+  <p>Softmax normiert die Scores zeilenweise zu Wahrscheinlichkeiten.
+  Dropout setzt zufällig einige Attention-Gewichte auf 0 (nur beim Training),
+  was Überanpassung reduziert.</p>
+
+  <h2>Schritt 5 — Gewichtete Summe über Values</h2>
+  <div class="formula-box">
+    <div class="formula">output = wei · V</div>
+    Form: <code>(B, T, head_size)</code>
+  </div>
+  <pre><span class="keyword">return</span> wei @ v</pre>
+
+  <p>Jedes Output-Token ist eine gewichtete Summe aller (erlaubten) Value-Vektoren.
+  Hohe Attention-Gewichte bedeuten: "Dieser Value-Vektor trägt stark zu meiner Ausgabe bei."</p>
+
+  <hr class="divider">
+
+  <h2>Die vollständige Formel</h2>
+  <div class="formula-box">
+    <div class="formula">Attention(Q, K, V) = softmax( Q·Kᵀ / √dₖ ) · V</div>
+    <span style="color:#57606a">dₖ = head_size &nbsp;·&nbsp; Masking der oberen Dreiecke vor Softmax</span>
+  </div>
+
+  <hr class="divider">
+
+  <h2>Datenfluss auf einen Blick</h2>
+  <pre>x  (B, T, n_embd)
+ │
+ ├── W_Q →  Q  (B, T, head_size)  ─┐
+ ├── W_K →  K  (B, T, head_size)   ├─ Q·Kᵀ/√dₖ → wei (B, T, T)
+ │                                 ┘     │
+ │                                   masked_fill(-∞) + softmax + dropout
+ │                                       │
+ └── W_V →  V  (B, T, head_size)  ◄─ wei @ V
+                                         │
+                                   output (B, T, head_size)</pre>
+
+  <hr class="divider">
+
+  <h2>Einbettung in MultiHeadAttention</h2>
+  <p>
+    Die Klasse <code>MultiHeadAttention</code> erstellt <code>n_heads</code> parallele Instanzen von <code>Head</code>,
+    jede mit eigenem <code>W_Q</code>, <code>W_K</code>, <code>W_V</code>. Jeder Head lernt andere Aspekte der
+    Beziehungen zwischen Tokens (z.B. Syntax, Semantik, Position). Die Ausgaben aller Heads werden konkateniert
+    und durch eine lineare Projektion auf <code>n_embd</code> zurückgeführt.
+  </p>
+  <pre><span class="comment"># In MultiHeadAttention.forward:</span>
+out = torch.<span class="fn">cat</span>([h(x) <span class="keyword">for</span> h <span class="keyword">in</span> <span class="keyword">self</span>.heads], dim=-1)  <span class="comment"># (B, T, n_heads * head_size)</span>
+<span class="keyword">return</span> <span class="keyword">self</span>.<span class="fn">dropout</span>(<span class="keyword">self</span>.proj(out))                    <span class="comment"># (B, T, n_embd)</span></pre>
+
+ 
+</div>
+</body>
+</html>
