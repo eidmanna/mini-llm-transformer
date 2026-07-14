@@ -333,23 +333,22 @@ uv run python generate.py \
 
 ## 10. Architektur-Überblick
 
-```
-Text → Tokenizer (char oder BPE) → Token-IDs
-                                  ↓
-                    Token-Embedding  (n_embd Dimensionen)
-                  + Position-Embedding (Position 0 … block_size-1)
-                                  ↓
-                    ┌─── N × Transformer-Block ───────────────┐
-                    │  LayerNorm                              │
-                    │  → Masked Multi-Head Self-Attention     │
-                    │     (kausale Maske: nur Vergangenheit)  │
-                    │  LayerNorm                              │
-                    │  → Feed-Forward-Netz (4×n_embd, ReLU)  │
-                    └─────────────────────────────────────────┘
-                                  ↓
-                    LayerNorm → Linear → Logits (vocab_size)
-                                  ↓
-                    Cross-Entropy Loss  /  Softmax-Sampling
+```mermaid
+flowchart TD
+    A["Text"] --> B["Tokenizer\n(char oder BPE)"]
+    B --> C["Token-IDs"]
+    C --> D["Token-Embedding\n(n_embd Dimensionen)\n+\nPosition-Embedding\n(Position 0 … block_size-1)"]
+    D --> E
+
+    subgraph E["N × Transformer-Block"]
+        direction TB
+        E1["LayerNorm"] --> E2["Masked Multi-Head Self-Attention\n(kausale Maske: nur Vergangenheit)"]
+        E2 --> E3["LayerNorm"]
+        E3 --> E4["Feed-Forward-Netz\n(4×n_embd, ReLU)"]
+    end
+
+    E --> F["LayerNorm → Linear → Logits (vocab_size)"]
+    F --> G["Cross-Entropy Loss  /  Softmax-Sampling"]
 ```
 
 **Decoder-Only / Kausal:** Position `i` darf nur auf Positionen `0…i` schauen – nie in die Zukunft. Das ist die Grundeigenschaft von GPT-artigen Modellen.
