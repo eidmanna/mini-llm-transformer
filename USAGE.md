@@ -10,12 +10,13 @@ Diese Anleitung beschreibt, wie du das Projekt einrichtest, das Training startes
 2. [Installation](#2-installation)
 3. [Training starten](#3-training-starten)
 4. [Ausgabe verstehen](#4-ausgabe-verstehen)
-5. [Hyperparameter anpassen](#5-hyperparameter-anpassen)
-6. [Beobachtbare Lernphasen](#6-beobachtbare-lernphasen)
-7. [Trainingsdaten erweitern](#7-trainingsdaten-erweitern)
-8. [Modell-Checkpoint laden](#8-modell-checkpoint-laden)
-9. [Architektur-Überblick](#9-architektur-überblick)
-10. [Tipps für Experimente](#10-tipps-für-experimente)
+5. [Tokenizer: char vs. BPE](#5-tokenizer-char-vs-bpe)
+6. [Hyperparameter anpassen](#6-hyperparameter-anpassen)
+7. [Beobachtbare Lernphasen](#7-beobachtbare-lernphasen)
+8. [Trainingsdaten erweitern](#8-trainingsdaten-erweitern)
+9. [Modell-Checkpoint laden](#9-modell-checkpoint-laden)
+10. [Architektur-Überblick](#10-architektur-überblick)
+11. [Tipps für Experimente](#11-tipps-für-experimente)
 
 ---
 
@@ -100,7 +101,74 @@ Alle `eval_interval` Iterationen erscheint ein Zwischen-Report:
 
 ---
 
-## 5. Hyperparameter anpassen
+## 5. Tokenizer: char vs. BPE
+
+Das Projekt unterstützt zwei Tokenisierungs-Strategien. Die Auswahl erfolgt in `train.py` über den `CONFIG`-Schlüssel `"tokenizer"`.
+
+### Variante 1 – Zeichen-Level (`"char"`)
+
+Jedes einzelne Zeichen im Text bekommt eine eigene Token-ID. Das Vokabular entspricht genau der Menge aller eindeutigen Zeichen im Trainingstext (typisch: 60–100 Tokens).
+
+```python
+"tokenizer":    "char",   # jedes Zeichen = ein Token
+# bpe_vocab_size wird bei "char" ignoriert
+```
+
+| Eigenschaft | Wert |
+|---|---|
+| Vokabular-Größe | Anzahl eindeutiger Zeichen (~60–100) |
+| Sequenzlänge | 1 Token pro Zeichen – sehr lange Sequenzen |
+| Training | Sofort, kein Lernschritt nötig |
+| Kontextfenster | Deckt wenige Wörter ab (je nach `block_size`) |
+| Eignet sich für | Schnelle Experimente, sehr kurze Texte |
+
+### Variante 2 – Byte Pair Encoding (`"bpe"`) ← Standard
+
+Häufig gemeinsam auftretende Zeichen werden schrittweise zu Subword-Tokens zusammengefasst. Gebräuchliche Wörter erhalten ein eigenes Token, seltene Wörter werden in bekannte Teilstücke zerlegt.
+
+```python
+"tokenizer":     "bpe",   # Subword-Tokenizer (empfohlen)
+"bpe_vocab_size": 2000,   # Ziel-Vokabulargröße (500–4000)
+```
+
+| Eigenschaft | Wert |
+|---|---|
+| Vokabular-Größe | Konfigurierbar via `bpe_vocab_size` (Standard: 2000) |
+| Sequenzlänge | 1 Token ≈ 2–4 Zeichen → **kürzere** Sequenzen |
+| Training | Einmaliger BPE-Lernschritt vor dem Modell-Training |
+| Kontextfenster | Gleiche `block_size`, aber effektiv mehr Text abgedeckt |
+| Eignet sich für | Alle Fälle mit ausreichend Trainingstext (≥ 5 000 Zeichen) |
+
+### `bpe_vocab_size` – Richtwerte
+
+| Wert | Textstärke | Effekt |
+|---|---|---|
+| `500` | kurze Texte (< 5 000 Zeichen) | kleines Vokabular, schnelles Training |
+| `2000` | **Standard** (empfohlen) | guter Kompromiss aus Kompression und Abdeckung |
+| `4000` | große Texte (> 50 000 Zeichen) | feinere Subwords, etwas langsamer |
+
+> **Faustregel:** Pro ~200 Zeichen Trainingstext macht ein weiterer Merge-Schritt Sinn.
+> Bei 10 000 Zeichen Text ist `bpe_vocab_size=500` bereits ausreichend, `2000` ist problemlos.
+
+### Umschalten in `train.py`
+
+```python
+# In train.py, CONFIG-Block:
+
+# BPE (Standard, empfohlen):
+"tokenizer":     "bpe",
+"bpe_vocab_size": 2000,
+
+# Zeichen-Level (schnell, minimalistisch):
+"tokenizer":    "char",
+```
+
+> **Wichtig:** Wenn du den Tokenizer-Modus änderst, muss das Modell **neu trainiert** werden.
+> Ein mit BPE gespeicherter Checkpoint kann nicht mit dem Char-Tokenizer geladen werden – Checkpoint-Datei löschen oder umbenennen.
+
+---
+
+## 6. Hyperparameter anpassen
 
 Öffne `train.py` und ändere die Werte im `CONFIG`-Dictionary ganz oben im Skript. Danach Training einfach neu starten.
 
@@ -154,7 +222,7 @@ Wie viele Textausschnitte pro Trainingsschritt verarbeitet werden.
 
 ---
 
-## 6. Beobachtbare Lernphasen
+## 7. Beobachtbare Lernphasen
 
 | Loss-Bereich | Was du im generierten Text siehst |
 |---|---|
@@ -166,7 +234,7 @@ Wie viele Textausschnitte pro Trainingsschritt verarbeitet werden.
 
 ---
 
-## 7. Trainingsdaten erweitern
+## 8. Trainingsdaten erweitern
 
 Mehr deutschsprachiger Text in `data/training_text.txt` → weniger Overfitting → flüssiger generierter Text.
 Empfehlung: mindestens 5.000 Zeichen, besser 20.000+. Das Vokabular (alle eindeutigen Zeichen) wird automatisch aus dem neuen Text ermittelt.
@@ -219,7 +287,7 @@ pbpaste >> data/training_text.txt
 
 ---
 
-## 8. Modell nach dem Training verwenden
+## 9. Modell nach dem Training verwenden
 
 Nach dem Training wird `model_checkpoint.pt` gespeichert. Zur Textgenerierung gibt es das fertige Skript `generate.py`.
 
@@ -263,10 +331,10 @@ uv run python generate.py \
 
 ---
 
-## 9. Architektur-Überblick
+## 10. Architektur-Überblick
 
 ```
-Text → Character-Tokenizer → Token-IDs
+Text → Tokenizer (char oder BPE) → Token-IDs
                                   ↓
                     Token-Embedding  (n_embd Dimensionen)
                   + Position-Embedding (Position 0 … block_size-1)
@@ -289,11 +357,12 @@ Text → Character-Tokenizer → Token-IDs
 | Datei | Inhalt |
 |---|---|
 | `model.py` | `Head`, `MultiHeadAttention`, `FeedForward`, `Block`, `MiniTransformer` |
-| `train.py` | Character-Tokenizer, Datenlader, Trainings-Loop, Evaluierung, Generierung |
+| `tokenizer.py` | `CharTokenizer`, `BPETokenizer`, `build_tokenizer` – beide Tokenizer-Varianten |
+| `train.py` | Datenlader, Trainings-Loop, Evaluierung, Generierung |
 
 ---
 
-## 10. Tipps für Experimente
+## 11. Tipps für Experimente
 
 1. **Klein anfangen:** Setze `n_embd=32`, `n_layers=2` – beobachte die Ausgabe, dann skaliere schrittweise hoch.
 2. **Overfitting erkennen:** `val_loss` wächst, während `train_loss` sinkt → `dropout` von `0.1` auf `0.2` erhöhen.
