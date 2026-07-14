@@ -1,6 +1,8 @@
 # Bedienungsanleitung: Mini-LLM Transformer
 
-Diese Anleitung beschreibt, wie du das Projekt einrichtest, das Training startest, die Ausgabe interpretierst und mit den Hyperparametern experimentierst.
+Diese Anleitung beschreibt, wie du das Projekt **lokal** einrichtest, das Training startest, die Ausgabe interpretierst und mit den Hyperparametern experimentierst.
+
+> **Google Colab:** Wer das Projekt ohne lokale Installation direkt im Browser ausführen möchte, findet die entsprechende Schritt-für-Schritt-Anleitung in [COLAB.md](COLAB.md).
 
 ---
 
