@@ -10,10 +10,14 @@ Stell dir vor, du bist **Bibliothekar** und möchtest automatisch den nächsten 
 
 Die AG arbeitet in fünf Stationen — **genau die fünf Stufen des Transformers**:
 
-```
-Rohtext → [Station 1] Übersetzer → [Station 2] Positionsschilder
-        → [Station 3] Lese-Tische (Attention) → [Station 4] Notizen aufarbeiten (FFN)
-        → [Station 5] Schätzung: Was kommt als Nächstes?
+```mermaid
+flowchart LR
+    R["Rohtext"] --> S1["Station 1\nÜbersetzer\n(Token-Embedding)"]
+    S1 --> S2["Station 2\nPositionsschilder\n(Pos-Embedding)"]
+    S2 --> S3["Station 3\nLese-Tische\n(Attention)"]
+    S3 --> S4["Station 4\nNotizen aufarbeiten\n(FFN)"]
+    S4 -->|"× n_layers"| S3
+    S4 --> S5["Station 5\nWas kommt als Nächstes?\n(LM Head)"]
 ```
 
 Diese fünf Stationen werden als **Schleife** mehrfach durchlaufen (= `n_layers` Transformer-Blöcke), bevor am Ende eine Antwort entsteht.
@@ -85,24 +89,33 @@ Jede Karteikarte bekommt **drei Rollen**:
 2. Ähnlichste Regale bekommen hohe Gewichte (Softmax → Summe = 1)
 3. Dein Output = gewichteter Durchschnitt aller Buch-Inhalte (Values)
 
-```
-Token i fragt:   q_i · k_0   k_1   k_2   k_3
-                 ──────────────────────────────
-Scores:           0.1    0.6   0.2   0.1   → nach Softmax: Gewichte
-Output:           0.1·v_0 + 0.6·v_1 + 0.2·v_2 + 0.1·v_3
+```mermaid
+flowchart TD
+    QI["Query von Token i"]
+    K0["Key k₀\nScore: 0.1"]
+    K1["Key k₁\nScore: 0.6"]
+    K2["Key k₂\nScore: 0.2"]
+    K3["Key k₃\nScore: 0.1"]
+    SM["Softmax\nGewichte: 0.1 · 0.6 · 0.2 · 0.1"]
+    OUT["Output\n= 0.1·v₀ + 0.6·v₁ + 0.2·v₂ + 0.1·v₃"]
+
+    QI --> K0 & K1 & K2 & K3
+    K0 & K1 & K2 & K3 --> SM
+    SM --> OUT
 ```
 
 ### Die Kausale Maske — kein Blick in die Zukunft
 
 Token 2 darf **nicht** sehen, was Token 3 sagt (das würde schummeln beim Schreiben). Zukünftige Positionen werden auf $-\infty$ gesetzt, nach Softmax also 0:
 
-```
-Wer darf wen sehen? (✓ = ja, ✗ = geblockt)
-         T0  T1  T2  T3
-Token 0 [ ✓   ✗   ✗   ✗ ]
-Token 1 [ ✓   ✓   ✗   ✗ ]
-Token 2 [ ✓   ✓   ✓   ✗ ]
-Token 3 [ ✓   ✓   ✓   ✓ ]
+```mermaid
+block-beta
+  columns 5
+  H["Wer darf\nwen sehen?"]:1  T0["T0"]:1  T1["T1"]:1  T2["T2"]:1  T3["T3"]:1
+  R0["Token 0"]:1  A00["✓"]:1  A01["✗"]:1  A02["✗"]:1  A03["✗"]:1
+  R1["Token 1"]:1  A10["✓"]:1  A11["✓"]:1  A12["✗"]:1  A13["✗"]:1
+  R2["Token 2"]:1  A20["✓"]:1  A21["✓"]:1  A22["✓"]:1  A23["✗"]:1
+  R3["Token 3"]:1  A30["✓"]:1  A31["✓"]:1  A32["✓"]:1  A33["✓"]:1
 ```
 
 ### Warum mehrere Heads?
@@ -212,79 +225,256 @@ Am Ende schreibt der Bibliothekar für jedes Wort im Vokabular auf einen Zettel:
 
 ## Das Gesamtbild auf einen Blick
 
-```
-Eingabe-Text:   "Der Mond"
-                     │
-    ┌────────────────▼────────────────┐
-    │  Token-Embedding  (Station 1)   │  "Der" → [0.2, -0.1, 0.8, ...]
-    │  + Positions-Embedding (Stat.2) │  + [0.0, 0.3, -0.1, ...]
-    └────────────────┬────────────────┘
-                     │  x: (B, T, n_embd)
-         ┌───────────▼───────────┐
-         │   Transformer-Block   │  ← n_layers mal wiederholen
-         │   ┌─────────────────┐ │
-         │   │  LayerNorm      │ │
-         │   │  Multi-Head     │ │  ← Wer achtet auf wen?
-         │   │  Attention      │ │
-         │   └────────┬────────┘ │
-         │   + Residual          │
-         │   ┌─────────────────┐ │
-         │   │  LayerNorm      │ │
-         │   │  Feed-Forward   │ │  ← Pro Token denken
-         │   └────────┬────────┘ │
-         │   + Residual          │
-         └───────────┬───────────┘
-                     │
-    ┌────────────────▼────────────────┐
-    │  LayerNorm + LM Head (Stat. 5)  │  (B, T, vocab_size) = Logits
-    └────────────────┬────────────────┘
-                     │
-    Nächstes Token: "scheint" ← Sampling mit Temperature + Top-k
+```mermaid
+flowchart TD
+    IN["Eingabe-Text\n&quot;Der Mond&quot;"]
+    EMB["Token-Embedding + Positions-Embedding\n&quot;Der&quot; → [0.2, -0.1, 0.8, …]\n+ [0.0, 0.3, -0.1, …]\n→ x: (B, T, n_embd)"]
+
+    subgraph BLK["Transformer-Block  (× n_layers)"]
+        LN1["LayerNorm"]
+        MHA["Multi-Head Attention\n← Wer achtet auf wen?"]
+        ADD1(("＋"))
+        LN2["LayerNorm"]
+        FFN["Feed-Forward-Netz\n← Pro Token denken"]
+        ADD2(("＋"))
+        LN1 --> MHA --> ADD1
+        LN2 --> FFN --> ADD2
+    end
+
+    HEAD["LayerNorm + LM Head\n→ Logits (B, T, vocab_size)"]
+    OUT["Nächstes Token: &quot;scheint&quot;\n← Sampling mit Temperature + Top-k"]
+
+    IN --> EMB --> BLK --> HEAD --> OUT
+    EMB -->|Residual| ADD1
+    ADD1 -->|Residual| ADD2
 ```
 
 ---
 
 ## Training vs. Generierung
 
-### Training — Fehler messen und korrigieren
+### Training — Die Bibliothek lernt durch Fehler
 
-Das Modell bekommt echten Text und muss vorhersagen, was das nächste Zeichen ist. Der Abstand zwischen Vorhersage und Wahrheit = **Loss**. Dieser Fehler wird durch das Netz zurückgespielt (**Backpropagation**) und die Gewichte werden ein kleines Stück korrigiert.
+**Bibliotheks-Analogie:**
+Stell dir vor, die Lese-AG bekommt tausende Buchseiten zum Üben. Sie deckt das letzte Wort jedes Satzes ab und rät: *„Was kommt als Nächstes?"* Ein strenger Korrekteur vergleicht die Antwort mit dem echten Wort und notiert den **Fehler (Loss)**. Die AG verbessert sich — aber nicht einfach durch „nochmal lesen". Der Korrekteur erklärt ihr rückwärts, welche Entscheidungen auf welchem Lese-Tisch den Fehler verursacht haben. Genau das ist **Backpropagation**.
+
+#### Schritt 1 — Forward Pass: Vorhersage treffen
+
+Das Modell liest den Kontext und erzeugt für jede Position einen Wahrscheinlichkeits-Vektor über alle Tokens:
+
+```python
+x, y = get_batch(train_data, block_size, batch_size)
+logits, loss = model(x, y)   # forward pass + loss in einem Schritt
+```
+
+Konkret: Eingabe `"Der Mo"` → Modell sagt `"n"` mit nur 5 % Wahrscheinlichkeit → **hoher Loss**.
+
+#### Schritt 2 — Loss berechnen: Cross-Entropy
+
+Die **Cross-Entropy** misst, wie weit die vorhergesagte Wahrscheinlichkeitsverteilung vom richtigen Token entfernt ist. Je überraschter das Modell vom richtigen Token ist, desto höher der Verlust:
 
 ```
-Eingabe: "Der Mo"   → Ziel: "n"
-Modell sagt: "n" mit 5% Wahrscheinlichkeit   → hoher Loss
-Modell sagt: "n" mit 85% Wahrscheinlichkeit  → niedriger Loss
+Richtiges Token: "n"
+Modell-Verteilung: {"m": 40%, "g": 30%, "n": 5%, ...}
+→ Loss = -log(0.05) ≈ 3.0   (sehr hoch)
+
+Nach Training:
+Modell-Verteilung: {"n": 85%, "m": 8%, ...}
+→ Loss = -log(0.85) ≈ 0.16  (niedrig)
 ```
 
-**6.000 Iterationen × 32 Batches** = das Modell sieht ~192.000 Beispiele.
+#### Schritt 3 — Backward Pass: Fehler zurückschicken
+
+`loss.backward()` berechnet für jedes einzelne Gewicht im Netz den **Gradienten** — die Antwort auf: *„Wenn ich dieses Gewicht ein kleines Stück erhöhe, wird der Fehler größer oder kleiner?"*
+
+**Bibliotheks-Analogie:**
+Der Korrekteur geht rückwärts durch alle Stationen: Er sagt dem LM-Head *„Du hast falsch geraten"*, der LM-Head sagt den Transformer-Blöcken *„eure Ausgabe war schuld"*, die Transformer-Blöcke sagen der Attention *„du hast auf die falschen Tokens geachtet"* — bis hin zu den Embeddings. Jede Station bekommt einen Schuld-Anteil (Gradient).
+
+```mermaid
+flowchart RL
+    LMH["LM Head\n→ falsches Token"]
+    BLK["Transformer-Blöcke\n→ schlechte Repräsentation"]
+    ATT["Attention\n→ falsche Gewichte"]
+    EMB["Embeddings\n→ schlechte Vektoren"]
+    LMH -->|"Gradient δL/δW"| BLK
+    BLK -->|"Gradient δL/δW"| ATT
+    ATT -->|"Gradient δL/δW"| EMB
+```
+
+#### Schritt 4 — Optimizer: Gewichte korrigieren
+
+Der **AdamW-Optimizer** nimmt die Gradienten und berechnet für jedes Gewicht, wie groß der Korrekturschritt sein soll:
+
+```python
+optimizer.zero_grad(set_to_none=True)   # alte Gradienten löschen
+loss.backward()                          # Gradienten berechnen
+torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient Clipping
+optimizer.step()                         # Gewichte anpassen
+```
+
+**Gradient Clipping** ist dabei die Sicherheitsbremse: Wenn ein Gradient explodiert (z. B. wegen eines unglücklichen Batches), wird er auf maximal 1.0 gekappt — das Modell macht dann lieber einen kleinen als einen riesigen falschen Schritt.
+
+#### Die vollständige Trainings-Schleife
+
+```mermaid
+flowchart TD
+    BATCH["Batch: 32 zufällige Textausschnitte\naus training_text.txt"]
+    FWD["Forward Pass\nVorhersage für jede Position"]
+    LOSS["Cross-Entropy Loss\nWie weit lag das Modell daneben?"]
+    BWD["Backward Pass\nGradienten berechnen"]
+    CLIP["Gradient Clipping\nmax_norm = 1.0"]
+    OPT["AdamW: Gewichte anpassen\nLernrate × Gradient"]
+    SCH["LR-Scheduler\nLernrate langsam reduzieren"]
+    NEXT["Nächste Iteration\n(6.000 × insgesamt)"]
+
+    BATCH --> FWD --> LOSS --> BWD --> CLIP --> OPT --> SCH --> NEXT --> BATCH
+```
+
+**6.000 Iterationen × 32 Batches** = das Modell sieht ~192.000 Beispiele. Nach jeder `eval_interval`-ten Iteration wird der aktuelle Loss ausgegeben und ein Textschnipsel generiert — man sieht live, wie die Sprache besser wird.
 
 | Fachwort | Lernhilfe |
 |---|---|
-| **Backpropagation** | Rückwärtsrechnung: Fehler wird schichtweise zurückgeleitet wie ein Echo. |
-| **Gradient** | Richtungsweiser für jede Gewichtszahl: In welche Richtung muss sie sich ändern? |
-| **AdamW-Optimizer** | Schlaues Update-Verfahren: passt die Lernrate pro Gewicht individuell an. |
-| **Gradient Clipping** | Sicherheits-Bremse: Wenn der Gradient zu groß wird, wird er gekappt. |
+| **Loss** | Der Fehler-Score. Startet hoch (~4), sinkt im Training. Ziel: möglichst niedrig. |
+| **Cross-Entropy** | Verlustfunktion: bestraft das Modell, wenn es dem richtigen Token wenig Wahrscheinlichkeit gibt. |
+| **Backpropagation** | Rückwärtsrechnung: Fehler wird schichtweise zurückgeleitet. Jede Schicht bekommt ihren Schuld-Anteil. |
+| **Gradient** | Richtungsweiser für ein Gewicht: In welche Richtung und wie stark muss es sich ändern? |
+| **AdamW-Optimizer** | Schlaues Update-Verfahren: merkt sich vergangene Gradienten und passt die Schrittgröße pro Gewicht individuell an. |
+| **Gradient Clipping** | Sicherheits-Bremse: Wenn der Gradient zu groß wird, wird er auf max_norm=1.0 gekappt. |
 | **Learning Rate** | Schrittgröße beim Lernen. Zu groß → überschießen. Zu klein → ewig dauern. |
-| **Dropout** | Beim Training werden zufällig Verbindungen gekappt. Verhindert, dass das Modell auf Auswendig-Lernen setzt. |
-| **Überanpassung (Overfitting)** | Modell lernt den Trainingstext auswendig, aber kann nicht verallgemeinern. |
+| **LR-Scheduler** | Reduziert die Lernrate über die Zeit — große Schritte am Anfang, Feintuning am Ende. |
+| **Dropout** | Beim Training werden zufällig Verbindungen gekappt. Verhindert Auswendig-Lernen. |
+| **Überanpassung (Overfitting)** | Modell lernt den Trainingstext auswendig, kann aber nicht verallgemeinern. Val-Loss steigt, Train-Loss sinkt. |
 
-### Generierung — Token für Token
+---
+
+### Generierung — das trainierte Modell verwenden
+
+Nach dem Training sind alle Gewichte eingefroren — **keine Gradienten, keine Updates mehr**. Das Modell ist jetzt ein reiner Leser, der auf Basis des gelernten Wissens vorwärts schreibt.
+
+**Bibliotheks-Analogie:**
+Die Lese-AG hat ihre Abschlussprüfung gemacht. Die Karteikarten (Gewichte) sind jetzt fest beschriftet und werden nicht mehr verändert. Jetzt sitzt der Bibliothekar am Schreibtisch und schreibt — Wort für Wort — den nächsten Satz, indem er immer wieder in seine fertigen Karteikarten schaut.
+
+#### Wie ein Satz entsteht — Schritt für Schritt
+
+```mermaid
+flowchart LR
+    SEED["Startwort\n&quot;Der&quot;"]
+    FWD1["Forward Pass\n(keine Gradienten)"]
+    LOGIT["Logits für alle\nmöglichen nächsten Token"]
+    TEMP["÷ Temperature\nkreativ ↔ konservativ"]
+    TOPK["Top-k Filter\nnur k=40 Kandidaten"]
+    SOFT["Softmax\n→ Wahrscheinlichkeiten"]
+    SAMPLE["torch.multinomial\nzufällig sampeln"]
+    NEXT["nächstes Token\nz.B. &quot; Mond&quot;"]
+    APP["ans Ende hängen\nneuer Kontext"]
+
+    SEED --> FWD1 --> LOGIT --> TEMP --> TOPK --> SOFT --> SAMPLE --> NEXT --> APP
+    APP -->|"nächste Runde"| FWD1
+```
 
 ```python
 for _ in range(max_new_tokens):
-    logits, _ = self(idx_cond)          # Vorhersage
+    idx_cond = idx[:, -self.block_size:]   # Kontext auf block_size begrenzen
+    logits, _ = self(idx_cond)             # Forward Pass — KEIN loss.backward()!
     logits = logits[:, -1, :] / temperature
-    # Top-k: nur die k besten Kandidaten
+    # Top-k: nur die k wahrscheinlichsten Kandidaten
     probs = F.softmax(logits, dim=-1)
-    idx_next = torch.multinomial(probs, 1)  # zufällig sampeln
-    idx = torch.cat([idx, idx_next], dim=1) # ans Ende hängen
+    idx_next = torch.multinomial(probs, 1)   # zufällig sampeln
+    idx = torch.cat([idx, idx_next], dim=1)  # ans Ende hängen
 ```
+
+**Der entscheidende Unterschied zum Training:** `model.eval()` statt `model.train()` — Dropout ist deaktiviert, `loss.backward()` wird nie aufgerufen. Das Modell lernt nichts mehr.
 
 | Fachwort | Lernhilfe |
 |---|---|
-| **Autoregressive Generierung** | Das Modell schreibt Zeichen für Zeichen — jedes neue Token wird zum neuen Kontext. |
-| **Temperature** | < 1.0 = konservativ/sicher, > 1.0 = kreativ/zufällig. Wie die Risikobereitschaft des Autors. |
-| **Top-k Sampling** | Nur die k wahrscheinlichsten Kandidaten kommen in die Lostrommel. Vermeidet seltsame Außenseiter-Token. |
+| **Autoregressive Generierung** | Das Modell schreibt Token für Token — jedes neue Token wird sofort zum neuen Kontext. |
+| **Temperature** | < 1.0 = konservativ/sicher (Spitzenwert wird verstärkt), > 1.0 = kreativ/zufällig (Verteilung flacher). |
+| **Top-k Sampling** | Nur die k wahrscheinlichsten Kandidaten kommen in die Lostrommel. Schützt vor absurden Außenseitern. |
+| **`model.eval()`** | Schaltet Dropout aus. Gewichte werden nicht mehr verändert. |
+
+---
+
+## Textvervollständigung vs. Fragen beantworten — was ist der Unterschied?
+
+Das ist einer der wichtigsten konzeptionellen Unterschiede überhaupt.
+
+### Was dieser mini-llm-transformer macht: reine Textvervollständigung
+
+Das Modell hat **eine einzige Aufgabe** gelernt: *„Sag, welches Token mit höchster Wahrscheinlichkeit als nächstes kommt."* Es hat nie eine Frage gestellt bekommen. Es kennt kein Konzept von Frage und Antwort.
+
+```
+Eingabe:  "Der Mond"
+Ausgabe:  "Der Mond scheint hell über den Bergen."
+          ↑ Modell vervollständigt den Satz — so wie er im Trainingstext vorkam
+```
+
+Das nennt sich **Next-Token Prediction** oder **Language Modelling**. Das Modell lernt die statistische Struktur der Sprache — Grammatik, Stil, Wortfolgen — aber es hat kein Verständnis davon, *was eine Frage ist*.
+
+### Was ChatGPT & Co. zusätzlich tun: Instruction Tuning + RLHF
+
+Große Modelle werden in **drei Phasen** trainiert:
+
+```mermaid
+flowchart TD
+    PT["Phase 1: Pre-Training\nMilliarden Token Rohtext\n→ Sprachstatistik lernen\n(= was dieser mini-transformer macht)"]
+    SFT["Phase 2: Supervised Fine-Tuning\nTausende Beispiele von\nFrage → Antwort\n→ Modell lernt das Format"]
+    RLHF["Phase 3: RLHF\nReinforcement Learning from Human Feedback\nMenschen bewerten Antworten\n→ Modell lernt, was 'gut' bedeutet"]
+
+    PT -->|"gleiches Modell, neue Daten"| SFT
+    SFT -->|"gleiches Modell, anderes Lernziel"| RLHF
+```
+
+#### Phase 1 — Pre-Training (= was hier passiert)
+
+Das Modell liest Milliarden Tokens und lernt: *„Nach 'Die Hauptstadt von' kommt oft 'Berlin'"*. Keine Anweisungen, keine Fragen — nur Muster.
+
+#### Phase 2 — Supervised Fine-Tuning (SFT)
+
+Das gleiche Modell bekommt jetzt kuratierte Beispiele:
+
+```
+Eingabe:  "Benutzer: Was ist die Hauptstadt von Deutschland?\nAssistent:"
+Ausgabe:  "Die Hauptstadt von Deutschland ist Berlin."
+```
+
+Das Modell lernt damit ein neues Muster: *„Wenn das Token 'Assistent:' kommt, soll ich eine hilfreiche Antwort schreiben."* — Technisch ist es immer noch Next-Token Prediction, aber die Trainingsdaten haben jetzt eine Frage-Antwort-Struktur.
+
+#### Phase 3 — RLHF (Reinforcement Learning from Human Feedback)
+
+Menschliche Bewerter vergleichen mehrere Antworten des Modells und wählen die beste. Aus diesen Bewertungen wird ein **Reward-Modell** trainiert, das vorhersagt, wie gut eine Antwort ist. Das Sprachmodell wird dann so trainiert, dass es möglichst hohe Belohnungen bekommt — ohne die Sprachfähigkeit zu verlieren.
+
+**Bibliotheks-Analogie:**
+Phase 1: Die AG liest wahllos alle Bücher in der Bibliothek.
+Phase 2: Ein Lehrer zeigt ihr, wie man Fragen beantwortet — mit Beispielen.
+Phase 3: Kunden der Bibliothek bewerten die Antworten mit 1–5 Sternen. Die AG lernt, was Kunden als hilfreich empfinden.
+
+### Der technische Kern bleibt identisch
+
+```mermaid
+flowchart LR
+    ARCH["Decoder-Only\nTransformer\n(gleiche Architektur)"]
+    ARCH --> MINI["mini-llm-transformer\n✗ kein Fine-Tuning\n✗ keine Frage-Antwort-Daten\n→ vervollständigt Text"]
+    ARCH --> GPT["ChatGPT / Gemini\n✓ SFT auf Q&A-Daten\n✓ RLHF-Feedback\n→ beantwortet Fragen"]
+```
+
+| Aspekt | mini-llm-transformer | ChatGPT / Gemini |
+|---|---|---|
+| Architektur | Decoder-Only Transformer | Decoder-Only Transformer |
+| Training-Ziel | Next-Token Prediction | Next-Token Prediction |
+| Trainings-Daten | ~5.300 Zeichen Deutsch | Billionen Token, Web + Bücher |
+| Fine-Tuning | keins | SFT + RLHF |
+| Kann Fragen beantworten? | nur zufällig, wenn im Trainingstext | ja, durch Phase 2+3 |
+| Weiß, was eine Frage ist? | nein | ja — als gelerntes Textmuster |
+
+> **Merksatz:** ChatGPT beantwortet keine Fragen, weil es „denkt". Es vervollständigt Text — aber es wurde darauf trainiert, dass nach einer Frage eine hilfreiche Antwort die wahrscheinlichste Fortsetzung ist.
+
+| Fachwort | Lernhilfe |
+|---|---|
+| **Next-Token Prediction** | Die Grundaufgabe aller Transformer: Was kommt als nächstes? Alles andere baut darauf auf. |
+| **Supervised Fine-Tuning** | Weiteres Training auf gelabelten Beispielen. Das Modell lernt ein neues Muster: Frage → Antwort. |
+| **RLHF** | Menschen bewerten Ausgaben, ein Reward-Modell lernt daraus, das Sprachmodell optimiert sich darauf. |
+| **Instruction Tuning** | Oberbegriff für SFT mit Anweisungs-Daten. Macht aus einem Textgenerator einen Assistenten. |
+| **System-Prompt** | Versteckter Text am Anfang des Kontexts bei ChatGPT & Co., der dem Modell sagt, wie es sich verhalten soll. |
 
 ---
 
