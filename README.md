@@ -27,6 +27,14 @@ Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den ak
 ├── train.py                # Trainings-Schleife + EXPERIMENTIER-ZENTRALE
 ├── ARCHITECTURE.md         # Ausführliche Architektur-Dokumentation (mit Diagrammen)
 ├── USAGE.md                # Bedienungsanleitung & Experimente
+├── docs/
+│   ├── en/
+│   │   ├── COLAB.md        # Google Colab — GPU-Training in der Cloud
+│   │   ├── ARCHITECTURE.md # Architektur-Dokumentation (English)
+│   │   └── USAGE.md        # Usage guide (English)
+│   └── explainers/
+│       ├── math-basics.md  # Vektor · Matrix · Tensor — Crashkurs
+│       └── attention-head.md  # Scaled Dot-Product Attention erklärt
 └── data/
     └── training_text.txt   # Deutschsprachiger Trainingstext (~5.300 Zeichen)
 ```
@@ -39,3 +47,11 @@ Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den ak
 |---|---|
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ausführliche Erklärung der gesamten Transformer-Architektur mit Mermaid-Diagrammen – ideal für Einsteiger |
 | **[USAGE.md](USAGE.md)** | Bedienungsanleitung, Hyperparameter-Tipps und Experimente |
+| **[COLAB.md](docs/en/COLAB.md)** | Google Colab – Modell auf GPU trainieren, ohne lokale Installation |
+
+### Explainer-Reihe
+
+| Dokument | Inhalt |
+|---|---|
+| **[math-basics.md](docs/explainers/math-basics.md)** | Vektor · Matrix · Tensor — visueller Crashkurs (keine Vorkenntnisse nötig) |
+| **[attention-head.md](docs/explainers/attention-head.md)** | Scaled Dot-Product Attention — `class Head` Schritt für Schritt erklärt |
