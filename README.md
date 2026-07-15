@@ -53,5 +53,6 @@ Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den ak
 
 | Dokument | Inhalt |
 |---|---|
+| **[how-it-works.md](docs/explainers/how-it-works.md)** | Wie der gesamte Transformer funktioniert — Bibliotheks-Analogie + Glossar aller Fachbegriffe |
 | **[math-basics.md](docs/explainers/math-basics.md)** | Vektor · Matrix · Tensor — visueller Crashkurs (keine Vorkenntnisse nötig) |
 | **[attention-head.md](docs/explainers/attention-head.md)** | Scaled Dot-Product Attention — `class Head` Schritt für Schritt erklärt |
