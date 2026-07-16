@@ -23,5 +23,6 @@ build/
 .DS_Store
 
 # Editor
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
