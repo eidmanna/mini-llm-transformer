@@ -60,6 +60,8 @@ flowchart TD
 
 Neuronale Netze arbeiten mit Zahlen, nicht mit Text. Der erste Schritt ist daher die **Tokenisierung**: Text wird in eine Folge von Ganzzahlen (Token-IDs) umgewandelt. Das Projekt bietet zwei Tokenizer-Implementierungen in [`tokenizer.py`](tokenizer.py), wählbar über den `--tokenizer`-Parameter in [`train.py`](train.py).
 
+> 🔗 Eine anschauliche Erklärung im Bibliotheks-Bild (was ein Token ist, was ein Steckbrief) findest du in [docs/explainers/how-it-works.md → Station 1](docs/explainers/how-it-works.md).
+
 ### 2.1 Character-Level-Tokenizer
 
 Der [`CharTokenizer`](tokenizer.py:61) ist der einfachste mögliche Ansatz: **jedes Zeichen = ein Token**.
@@ -514,6 +516,14 @@ flowchart LR
     style C fill:#fef3c7,stroke:#f59e0b
     style E fill:#f0fdf4,stroke:#22c55e
 ```
+
+### 8.0 Backward Pass und Vanishing Gradient
+
+Nach dem Forward Pass und der Loss-Berechnung läuft `loss.backward()` den Computation Graph **rückwärts** ab und berechnet für jede lernbare Matrix ihren Gradienten — die Antwort auf: *„In welche Richtung und wie stark muss sich diese Zahl ändern, damit der Loss sinkt?"*
+
+In tiefen Netzen werden Gradienten beim Rückwärtsdurchlauf mit jedem Schritt kleiner (**Vanishing Gradient**), weil die Kettenregel viele Ableitungen miteinander multipliziert. Die **Residual-Verbindungen** aus Kap. 6.1 mildern das ab: der Gradient kann über den direkten `+`-Pfad zurückfließen, ohne durch Attention oder FFN gedämpft zu werden.
+
+> 🔗 Eine ausführliche Erklärung mit Bibliotheks-Analogie und Debugger-Ausdrücken: [docs/explainers/how-it-works.md → Schritt 3](docs/explainers/how-it-works.md).
 
 ### 8.1 Batching
 

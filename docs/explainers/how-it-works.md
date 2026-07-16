@@ -29,8 +29,10 @@ Diese fünf Stationen werden als **Schleife** mehrfach durchlaufen (= `n_layers`
 **Was passiert?**  
 Jedes Zeichen (oder Wort-Stück) wird in eine **Zahlen-Wolke** (Vektor) verwandelt.
 
-**Bibliotheks-Analogie:**  
-Jedes Wort bekommt eine **Karteikarte** mit 64–128 Zahlen drauf — wie ein Steckbrief, der beschreibt, welche Bedeutung das Wort hat, wie es sich anfühlt, ob es eher Nomen oder Verb ist usw. Anfangs sind die Zahlen zufällig; das Modell lernt im Training die sinnvollen Steckbriefe.
+**Bibliotheks-Analogie:**
+Jedes Wort bekommt eine **Karteikarte** mit `n_embd` Zahlen drauf — wie ein Steckbrief, der beschreibt, welche Bedeutung das Wort hat, wie es sich anfühlt, ob es eher Nomen oder Verb ist usw. Im simple-Modus sind das 32 Zahlen, im advanced-Modus 96. Anfangs sind die Zahlen zufällig; das Modell lernt im Training die sinnvollen Steckbriefe.
+
+> 🔗 **Wie wird aus Text eine Token-ID?** Das erledigt der Tokenizer — entweder zeichenweise (CharTokenizer) oder als Silbenstücke (BPE). Details: [ARCHITECTURE.md Kap. 2](../../ARCHITECTURE.md) · [USAGE.md Kap. 5](../../USAGE.md#5-tokenizer-char-vs-bpe)
 
 **Im Code:**
 ```python
@@ -304,18 +306,48 @@ Modell-Verteilung: {"n": 85%, "m": 8%, ...}
 `loss.backward()` berechnet für jedes einzelne Gewicht im Netz den **Gradienten** — die Antwort auf: *„Wenn ich dieses Gewicht ein kleines Stück erhöhe, wird der Fehler größer oder kleiner?"*
 
 **Bibliotheks-Analogie:**
-Der Korrekteur geht rückwärts durch alle Stationen: Er sagt dem LM-Head *„Du hast falsch geraten"*, der LM-Head sagt den Transformer-Blöcken *„eure Ausgabe war schuld"*, die Transformer-Blöcke sagen der Attention *„du hast auf die falschen Tokens geachtet"* — bis hin zu den Embeddings. Jede Station bekommt einen Schuld-Anteil (Gradient).
+Stell dir vor, der strenge **Chefkorrekteur** steht am Ende der Bibliothek und hält das falsch vorhergesagte Wort in der Hand. Er geht rückwärts durch alle Stationen und verteilt **Schuld-Zettel**:
+
+1. 📋 **Station 5 — Wahrscheinlichkeits-Tabelle (W_LM):** *„Du hast dem falschen Zeichen zu viele Punkte gegeben."* Die Wahrscheinlichkeits-Tabelle bekommt als erstes einen Schuld-Zettel — und schickt einen weiter nach hinten.
+
+2. 📋 **Station 4 — Notiz-Aufweitung/Verdichtung (W_1, W_2):** *„Die Notizen, die ihr mir geliefert habt, waren ungenau."* Beide FFN-Schichten bekommen ihren Anteil.
+
+3. 📋 **Station 3 — Frage/Angebot/Inhalts-Tabellen (W_Q, W_K, W_V, W_O):** *„Du hast auf die falschen Bücher geachtet."* Jede der vier Tabellen pro Lese-Tisch bekommt einen eigenen Zettel — **wie sehr** hat sie zum Fehler beigetragen?
+
+4. 📋 **Station 2 — Positions-Karteikarten:** *„Für diese Position im Satz war dein Steckbrief irreführend."*
+
+5. 📋 **Station 1 — Bedeutungs-Karteikarten:** *„Der Steckbrief für dieses Zeichen war falsch."* — Aber nur die Zeichen, die im aktuellen Batch vorkamen, bekommen einen Zettel. Zeichen die gar nicht vorkamen, bleiben unverändert.
+
+**Der Schuld-Zettel (Gradient) sagt nicht „du bist schuldig" — er sagt genau: um wie viel und in welche Richtung muss sich diese Zahl ändern, damit der Fehler kleiner wird.**
 
 ```mermaid
 flowchart RL
-    LMH["LM Head\n→ falsches Token"]
-    BLK["Transformer-Blöcke\n→ schlechte Repräsentation"]
-    ATT["Attention\n→ falsche Gewichte"]
-    EMB["Embeddings\n→ schlechte Vektoren"]
-    LMH -->|"Gradient δL/δW"| BLK
-    BLK -->|"Gradient δL/δW"| ATT
-    ATT -->|"Gradient δL/δW"| EMB
+    LMH["Station 5\nW_LM\nWahrscheinlichkeits-Tabelle\n→ falsches Zeichen bewertet"]
+    FFN["Station 4\nW_1, W_2\nNotiz-Aufweitung/Verdichtung\n→ ungenaue Notizen"]
+    ATT["Station 3\nW_Q, W_K, W_V, W_O\nFrage/Angebot/Inhalts-Tabellen\n→ falsche Aufmerksamkeit"]
+    EMB["Station 1+2\nToken- u. Positional-Embedding\n→ ungenauer Steckbrief"]
+    LMH -->|"Schuld-Zettel\n(Gradient)"| FFN
+    FFN -->|"Schuld-Zettel\n(Gradient)"| ATT
+    ATT -->|"Schuld-Zettel\n(Gradient)"| EMB
 ```
+
+**Wie kommt jede Matrix zu ihrem eigenen Gradienten?**
+PyTorch zeichnet beim Forward Pass unsichtbar einen **Computation Graph** auf — eine Art Aufzeichnung aller Rechenschritte. `loss.backward()` läuft diesen Graph rückwärts ab und multipliziert die Ableitungen Schicht für Schicht (Kettenregel). Das Ergebnis: jede der ~13.000 Zahlen im Modell bekommt ihren eigenen Schuld-Zettel.
+
+> **Warum bekommen frühe Stationen kleinere Schuld-Zettel?**
+> Weil die Kettenregel viele kleine Ableitungen miteinander multipliziert — je länger der Weg von einer Station zum Loss, desto kleiner wird das Produkt. Das nennt sich **Vanishing Gradient**. Die Residual-Verbindungen in [`model.py:123-124`](../../model.py:123) bauen dafür eine Abkürzung: der Gradient kann direkt durch die `+`-Verbindung fließen, ohne durch Attention oder FFN gedämpft zu werden.
+
+> 📍 **Debugger — Gradienten live ansehen** (Breakpoint nach [`train.py:396`](../../train.py:396)):
+> ```python
+> # Station 5 — bekommt als erstes einen Schuld-Zettel, meist groß:
+> model.lm_head.weight.grad.abs().mean()
+> # Station 1 — am Ende der Kette, meist kleiner:
+> model.token_embedding.weight.grad.abs().mean()
+> # Station 3 — Frage-Tabelle von Block 0, Head 0:
+> model.blocks[0].sa.heads[0].query.weight.grad.abs().mean()
+> # Welche Zeichen haben überhaupt einen Gradienten bekommen?
+> model.token_embedding.weight.grad.abs().sum(dim=1).nonzero()
+> ```
 
 #### Schritt 4 — Optimizer: Gewichte korrigieren
 
@@ -354,7 +386,7 @@ flowchart TD
 
 #### Alle lernbaren Karteikarten (Matrizen) im Überblick
 
-Jede dieser „Karteikarten" ist eine Matrix aus Zahlen. Sie starten mit Zufallswerten und werden nach jedem Trainingsschritt ein kleines Stück verbessert. Im simple-Modus (`n_embd=32`, `n_heads=4`, `n_layers=2`, `vocab_size=67`, `block_size=64`):
+Jede dieser „Karteikarten" ist eine Matrix aus Zahlen. Sie starten mit Zufallswerten und werden nach jedem Trainingsschritt ein kleines Stück verbessert. Die Größen unten gelten für den **simple-Modus** (`n_embd=32`, `n_heads=4`, `n_layers=2`, `block_size=64`). Im advanced-Modus sind Token-/Positions-Embedding 67×96 bzw. 128×96, alle Head-Matrizen 96×16, FFN 96×384 und 384×96. `vocab_size=67` ist ein Beispielwert — die tatsächliche Zahl hängt vom Trainingstext ab:
 
 | Station (Bibliotheks-Bild) | Fachname der Matrix | Was die Karteikarte speichert | Größe (simple) | Im Debugger / Code |
 |---|---|---|---|---|
@@ -585,3 +617,4 @@ uv run python train.py --max_iters 500   # simple + kürzeres Training
 |---|---|
 | [`math-basics.md`](math-basics.md) | Vektor · Matrix · Tensor — visueller Crashkurs |
 | [`attention-head.md`](attention-head.md) | `class Head` — Scaled Dot-Product Attention Schritt für Schritt |
+| [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) | Technische Architektur-Referenz: Tokenizer (Kap. 2), Attention (Kap. 3–4), Training (Kap. 8), Hyperparameter (Kap. 10) |
