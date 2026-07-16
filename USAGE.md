@@ -18,7 +18,8 @@ Diese Anleitung beschreibt, wie du das Projekt **lokal** einrichtest, das Traini
 8. [Trainingsdaten erweitern](#8-trainingsdaten-erweitern)
 9. [Modell-Checkpoint laden](#9-modell-checkpoint-laden)
 10. [Architektur-Überblick](#10-architektur-überblick)
-11. [Tipps für Experimente](#11-tipps-für-experimente)
+11. [Debuggen mit VS Code](#11-debuggen-mit-vs-code)
+12. [Tipps für Experimente](#12-tipps-für-experimente)
 
 ---
 
@@ -417,7 +418,62 @@ flowchart TD
 
 ---
 
-## 11. Tipps für Experimente
+## 11. Debuggen mit VS Code
+
+Das Projekt enthält eine fertige Debug-Konfiguration unter `.vscode/launch.json`. Damit lässt sich `train.py` direkt aus VS Code heraus Schritt für Schritt durchlaufen — ohne `uv run`.
+
+### Starten
+
+1. Sidebar-Icon **Run and Debug** öffnen (⌘+Shift+D)
+2. Konfiguration aus dem Dropdown wählen:
+
+| Konfiguration | Wann sinnvoll |
+|---|---|
+| `train.py – simple (debug)` | Standardfall — kleiner Datensatz, läuft schnell durch |
+| `train.py – advanced (debug)` | Vollständiger Lauf mit BPE und großem Datensatz |
+| `train.py – custom args (debug)` | Nur 200 Iterationen — ideal zum Durchsteppen einzelner Schritte |
+
+3. **F5** drücken — der Debugger hält am ersten gesetzten Breakpoint an
+
+> **Hinweis:** Der Interpreter ist `.venv/bin/python` — dasselbe Python mit denselben Paketen wie bei `uv run python train.py`. Kein Unterschied im Ergebnis, nur der Debugger ist eingehängt.
+
+### Empfohlene Breakpoints
+
+Setze rote Punkte (Klick links neben die Zeilennummer) an diesen Stellen:
+
+| Datei | Zeile | Was du dort siehst |
+|---|---|---|
+| `train.py` | 354 | Beginn der Trainings-Schleife — `iteration` zählt von 1 an |
+| `train.py` | 392–393 | Einen Batch laden + Forward Pass — `x`, `y`, `loss` inspizieren |
+| `train.py` | 395–399 | Backward Pass + Optimizer-Schritt — Gradienten vor/nach `step()` |
+| `model.py` | 184–186 | Token- + Positions-Embedding — Form `(B, T, n_embd)` |
+| `model.py` | 46–57 | `Head.forward` — `k`, `q`, `wei` (Attention-Gewichte) nach Softmax |
+| `model.py` | 122–125 | `Block.forward` — Residual-Verbindung live beobachten |
+| `model.py` | 189–195 | `MiniTransformer.forward` — `logits` und skalaren `loss` prüfen |
+
+### Nützliche Debugger-Ausdrücke im Watch-Panel
+
+```
+loss.item()                              # aktueller Loss als Zahl
+x.shape                                  # Batch-Form, z.B. torch.Size([16, 64])
+model.token_embedding.weight.grad        # Gradient des Embedding nach backward()
+logits[0, -1].topk(5)                   # Top-5 Kandidaten für das nächste Token
+optimizer.param_groups[0]['lr']          # aktuelle Lernrate
+```
+
+### Shortcuts
+
+| Taste | Aktion |
+|---|---|
+| **F10** | Step Over — nächste Zeile |
+| **F11** | Step Into — in Funktion springen (z. B. `model.forward`) |
+| **Shift+F11** | Step Out — aus Funktion heraus |
+| **F5** | Continue — bis zum nächsten Breakpoint |
+| **F9** | Breakpoint an/aus |
+
+---
+
+## 12. Tipps für Experimente
 
 1. **Mit `simple` starten:** Der simple-Modus ist bewusst schnell — ideal zum ersten Ausprobieren. Dann mit `--mode advanced` auf den größeren Datensatz wechseln.
 2. **Klein anfangen:** `uv run python train.py --n_embd 32 --n_layers 2` – beobachte die Ausgabe, dann skaliere schrittweise hoch.

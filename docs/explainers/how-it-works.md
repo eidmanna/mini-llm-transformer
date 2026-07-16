@@ -37,6 +37,8 @@ Jedes Wort bekommt eine **Karteikarte** mit 64–128 Zahlen drauf — wie ein St
 tok_emb = self.token_embedding(idx)   # (B, T, n_embd)
 ```
 
+> 📍 **Debugger-Haltepunkt:** [`model.py:184`](../../model.py:184) — hier siehst du `tok_emb` mit Form `(batch_size, T, n_embd)`.
+
 | Fachwort | Lernhilfe |
 |---|---|
 | **Token** | Ein Stück Text — hier: einzelnes Zeichen oder Silbe. Denk an Legostein. |
@@ -58,6 +60,8 @@ Alle Bücher in der Bibliothek haben denselben Grundsteckbrief für das Wort „
 pos_emb = self.position_embedding(torch.arange(T, device=idx.device))  # (T, n_embd)
 x = tok_emb + pos_emb   # addiert: gleiche Form bleibt (B, T, n_embd)
 ```
+
+> 📍 **Debugger-Haltepunkt:** [`model.py:185-186`](../../model.py:185) — nach Zeile 186 enthält `x` die Summe aus Token- und Positions-Embedding.
 
 | Fachwort | Lernhilfe |
 |---|---|
@@ -136,6 +140,10 @@ out = torch.cat([h(x) for h in self.heads], dim=-1)  # Alle Heads zusammenklappe
 return self.dropout(self.proj(out))                    # Auf n_embd projizieren
 ```
 
+> 📍 **Debugger-Haltepunkte:**
+> - [`model.py:46-57`](../../model.py:46) (`Head.forward`) — `k`, `q`, `wei` nach Scaled-Dot-Product, Maske und Softmax inspizieren
+> - [`model.py:78`](../../model.py:78) (`MultiHeadAttention.forward`) — `out` enthält alle Heads zusammengeklappt
+
 | Fachwort | Lernhilfe |
 |---|---|
 | **Self-Attention** | „Self" = das Modell achtet auf sich selbst (seinen eigenen Satz), kein externes Wörterbuch. |
@@ -165,6 +173,8 @@ self.net = nn.Sequential(
 )
 ```
 
+> 📍 **Debugger-Haltepunkt:** [`model.py:100-101`](../../model.py:100) (`FeedForward.forward`) — `x` vor und nach `self.net(x)` vergleichen: gleiche Form, andere Werte.
+
 | Fachwort | Lernhilfe |
 |---|---|
 | **MLP / Feed-Forward** | Multi-Layer Perceptron. Klassisches neuronales Netz: Eingabe → Versteckt → Ausgabe. |
@@ -185,6 +195,8 @@ Zwei wichtige Tricks machen das Stapeln stabil:
 x = x + self.sa(self.ln1(x))   # Attention-Ergebnis wird zum Eingang addiert
 x = x + self.ff(self.ln2(x))   # FFN-Ergebnis wird zum Eingang addiert
 ```
+
+> 📍 **Debugger-Haltepunkt:** [`model.py:122-125`](../../model.py:122) (`Block.forward`) — nach jeder Zeile siehst du, wie `x` durch die Residual-Verbindung erhalten bleibt und nur leicht verändert wird.
 
 **Analogie:** Du hast einen langen Brief geschrieben. Statt ihn komplett zu ersetzen, fügst du nur *Korrekturen am Rand* ein. Das Original bleibt erhalten; die Schicht ändert nur das, was nötig ist.
 
@@ -211,6 +223,8 @@ Der letzte Vektor jedes Tokens wird auf die Größe des Vokabulars projiziert. D
 x = self.ln_final(x)       # Letzte Normierung
 logits = self.lm_head(x)   # (B, T, vocab_size) — ein Score pro möglichem Zeichen
 ```
+
+> 📍 **Debugger-Haltepunkt:** [`model.py:189-195`](../../model.py:189) (`MiniTransformer.forward`) — `logits` hat Form `(B, T, vocab_size)`; `loss` ist ein Skalar. Beim Inspizieren von `logits[0, -1]` siehst du die Rohscores für das nächste Token.
 
 **Bibliotheks-Analogie:**  
 Am Ende schreibt der Bibliothekar für jedes Wort im Vokabular auf einen Zettel: *„Wie wahrscheinlich ist es, dass dieses Wort als Nächstes kommt?"* Das wahrscheinlichste Wort (oder ein zufällig gewähltes aus den Top-k) wird ausgegeben.
@@ -267,6 +281,8 @@ x, y = get_batch(train_data, block_size, batch_size)
 logits, loss = model(x, y)   # forward pass + loss in einem Schritt
 ```
 
+> 📍 **Debugger-Haltepunkt:** [`train.py:392-393`](../../train.py:392) — hier beginnt ein einzelner Trainingsschritt. `x` ist der Eingabe-Batch `(B, T)`, `y` die erwarteten Ziel-Tokens, `loss` der skalare Fehlerwert.
+
 Konkret: Eingabe `"Der Mo"` → Modell sagt `"n"` mit nur 5 % Wahrscheinlichkeit → **hoher Loss**.
 
 #### Schritt 2 — Loss berechnen: Cross-Entropy
@@ -311,6 +327,12 @@ loss.backward()                          # Gradienten berechnen
 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient Clipping
 optimizer.step()                         # Gewichte anpassen
 ```
+
+> 📍 **Debugger-Haltepunkte:**
+> - [`train.py:395`](../../train.py:395) — nach `zero_grad`: alle `.grad`-Felder der Parameter sind `None`
+> - [`train.py:396`](../../train.py:396) — nach `loss.backward()`: jetzt hat z. B. `model.token_embedding.weight.grad` Werte ≠ 0
+> - [`train.py:398`](../../train.py:398) — nach Gradient Clipping: Norm aller Gradienten ≤ 1.0
+> - [`train.py:399`](../../train.py:399) — nach `optimizer.step()`: Gewichte wurden aktualisiert
 
 **Gradient Clipping** ist dabei die Sicherheitsbremse: Wenn ein Gradient explodiert (z. B. wegen eines unglücklichen Batches), wird er auf maximal 1.0 gekappt — das Modell macht dann lieber einen kleinen als einen riesigen falschen Schritt.
 
