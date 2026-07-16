@@ -165,9 +165,19 @@ def build_config(args: argparse.Namespace) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_text(path: str) -> str:
-    """Trainingstext aus Datei lesen."""
+    """Trainingstext aus Datei lesen.
+
+    Zeilenumbrüche werden herausgefiltert: Absätze (Leerzeilen) werden zu einem
+    einzelnen Leerzeichen, einfache Zeilenumbrüche werden entfernt, damit das
+    Modell keine '\n'-Token lernt.
+    """
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+        text = f.read()
+    # Doppelte Zeilenumbrüche (Absätze) → Leerzeichen
+    text = text.replace("\n\n", " ")
+    # Verbleibende einzelne Zeilenumbrüche entfernen
+    text = text.replace("\n", "")
+    return text
 
 
 def get_batch(
