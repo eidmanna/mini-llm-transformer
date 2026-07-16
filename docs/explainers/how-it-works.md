@@ -356,22 +356,22 @@ flowchart TD
 
 Jede dieser „Karteikarten" ist eine Matrix aus Zahlen. Sie starten mit Zufallswerten und werden nach jedem Trainingsschritt ein kleines Stück verbessert. Im simple-Modus (`n_embd=32`, `n_heads=4`, `n_layers=2`, `vocab_size=67`, `block_size=64`):
 
-| Station (Bibliotheks-Bild) | Was die Karteikarte speichert | Größe (simple) | Im Debugger / Code |
-|---|---|---|---|
-| **Station 1** — Bedeutungs-Karteikarten | Für jedes der 67 Zeichen einen 32-dimensionalen Steckbrief: Was bedeutet dieses Zeichen? | 67 × 32 | `model.token_embedding.weight` · [`model.py:157`](../../model.py:157) |
-| **Station 2** — Positions-Karteikarten | Für jede der 64 möglichen Positionen im Satz: Was ist typisch für diese Stelle? | 64 × 32 | `model.position_embedding.weight` · [`model.py:158`](../../model.py:158) |
-| **Station 3** — Frage-Tabelle (Query) | Wie fragt ein Token: *„Was suche ich gerade?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].query.weight` · [`model.py:38`](../../model.py:38) |
-| **Station 3** — Angebot-Tabelle (Key) | Wie antwortet ein Token: *„Was biete ich an?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].key.weight` · [`model.py:37`](../../model.py:37) |
-| **Station 3** — Inhalts-Tabelle (Value) | Was gibt ein Token wirklich weiter, wenn es ausgewählt wird | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].value.weight` · [`model.py:39`](../../model.py:39) |
-| **Station 3** — Misch-Tabelle (Projektion) | Wie werden die 4 Lese-Tische zu einem Ergebnis zusammengefasst | 32 × 32 | `model.blocks[i].sa.proj.weight` · [`model.py:74`](../../model.py:74) |
-| **Station 4** — Notiz-Aufweitung | Erste Schicht des Denk-Schritts: Ideen ausbreiten (4× breiter) | 32 × 128 | `model.blocks[i].ff.net[0].weight` · [`model.py:94`](../../model.py:94) |
-| **Station 4** — Notiz-Verdichtung | Zweite Schicht: Ideen wieder zusammenziehen | 128 × 32 | `model.blocks[i].ff.net[2].weight` · [`model.py:96`](../../model.py:96) |
-| **Zwischen Station 3 u. 4** — Maßstabs-Regler | Gleicht Werte vor Attention an (LayerNorm) | 32 + 32 | `model.blocks[i].ln1.weight/bias` · [`model.py:119`](../../model.py:119) |
-| **Zwischen Station 4 u. 5** — Maßstabs-Regler | Gleicht Werte vor FFN an (LayerNorm) | 32 + 32 | `model.blocks[i].ln2.weight/bias` · [`model.py:120`](../../model.py:120) |
-| **Vor Station 5** — Letzter Maßstabs-Regler | Abschluss-Normierung nach allen Blöcken | 32 + 32 | `model.ln_final.weight/bias` · [`model.py:162`](../../model.py:162) |
-| **Station 5** — Wahrscheinlichkeits-Tabelle | Übersetzt den 32-dim. Vektor in 67 Scores — einer pro Zeichen | 32 × 67 | `model.lm_head.weight` · [`model.py:163`](../../model.py:163) |
+| Station (Bibliotheks-Bild) | Fachname der Matrix | Was die Karteikarte speichert | Größe (simple) | Im Debugger / Code |
+|---|---|---|---|---|
+| **Station 1** — Bedeutungs-Karteikarten | **Token-Embedding-Matrix** | Für jedes der 67 Zeichen einen 32-dimensionalen Steckbrief: Was bedeutet dieses Zeichen? | 67 × 32 | `model.token_embedding.weight` · [`model.py:157`](../../model.py:157) |
+| **Station 2** — Positions-Karteikarten | **Positional-Embedding-Matrix** | Für jede der 64 möglichen Positionen im Satz: Was ist typisch für diese Stelle? | 64 × 32 | `model.position_embedding.weight` · [`model.py:158`](../../model.py:158) |
+| **Station 3** — Frage-Tabelle | **Query-Matrix W_Q** | Wie fragt ein Token: *„Was suche ich gerade?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].query.weight` · [`model.py:38`](../../model.py:38) |
+| **Station 3** — Angebot-Tabelle | **Key-Matrix W_K** | Wie antwortet ein Token: *„Was biete ich an?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].key.weight` · [`model.py:37`](../../model.py:37) |
+| **Station 3** — Inhalts-Tabelle | **Value-Matrix W_V** | Was gibt ein Token wirklich weiter, wenn es ausgewählt wird | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].value.weight` · [`model.py:39`](../../model.py:39) |
+| **Station 3** — Misch-Tabelle | **Output-Projektions-Matrix W_O** | Wie werden die 4 Lese-Tische zu einem Ergebnis zusammengefasst | 32 × 32 | `model.blocks[i].sa.proj.weight` · [`model.py:74`](../../model.py:74) |
+| **Station 4** — Notiz-Aufweitung | **FFN-Aufweitungs-Matrix W_1** | Erste lineare Schicht des Feed-Forward-Netzes: Ideen ausbreiten (4× breiter) | 32 × 128 | `model.blocks[i].ff.net[0].weight` · [`model.py:94`](../../model.py:94) |
+| **Station 4** — Notiz-Verdichtung | **FFN-Verdichtungs-Matrix W_2** | Zweite lineare Schicht: Ideen wieder zusammenziehen | 128 × 32 | `model.blocks[i].ff.net[2].weight` · [`model.py:96`](../../model.py:96) |
+| **Zwischen Stat. 3 und 4** — Maßstabs-Regler | **Layer-Norm-1-Parameter γ, β** | Skalierung und Verschiebung vor der Attention (LayerNorm) | 32 + 32 | `model.blocks[i].ln1.weight/bias` · [`model.py:119`](../../model.py:119) |
+| **Zwischen Stat. 4 und 5** — Maßstabs-Regler | **Layer-Norm-2-Parameter γ, β** | Skalierung und Verschiebung vor dem FFN (LayerNorm) | 32 + 32 | `model.blocks[i].ln2.weight/bias` · [`model.py:120`](../../model.py:120) |
+| **Vor Station 5** — Letzter Maßstabs-Regler | **Finale Layer-Norm γ, β** | Abschluss-Normierung nach allen Transformer-Blöcken | 32 + 32 | `model.ln_final.weight/bias` · [`model.py:162`](../../model.py:162) |
+| **Station 5** — Wahrscheinlichkeits-Tabelle | **Language-Model-Head-Matrix W_LM** | Übersetzt den 32-dim. Vektor in 67 Scores — einer pro Zeichen | 32 × 67 | `model.lm_head.weight` · [`model.py:163`](../../model.py:163) |
 
-> **Hinweis Vielfachheit:** Die Stationen 3 und 4 (inkl. Maßstabs-Regler) gibt es `n_layers=2` Mal übereinander gestapelt — also `blocks[0]` und `blocks[1]`. Pro Block gibt es `n_heads=4` Frage/Angebot/Inhalts-Tabellen.
+> **Hinweis Vielfachheit:** Die Stationen 3 und 4 (inkl. Maßstabs-Regler) gibt es `n_layers=2` Mal übereinander gestapelt — also `blocks[0]` und `blocks[1]`. Pro Block gibt es `n_heads=4` Query/Key/Value-Matrizen (W_Q, W_K, W_V).
 
 Gesamtzahl aller Zahlen im Debugger prüfen:
 ```python
