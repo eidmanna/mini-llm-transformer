@@ -272,7 +272,7 @@ flowchart TD
 ### Training — Die Bibliothek lernt durch Fehler
 
 **Bibliotheks-Analogie:**
-Stell dir vor, die Lese-AG bekommt tausende Buchseiten zum Üben. Sie deckt das letzte Wort jedes Satzes ab und rät: *„Was kommt als Nächstes?"* Ein strenger Korrekteur vergleicht die Antwort mit dem echten Wort und notiert den **Fehler (Loss)**. Die AG verbessert sich — aber nicht einfach durch „nochmal lesen". Der Korrekteur erklärt ihr rückwärts, welche Entscheidungen auf welchem Lese-Tisch den Fehler verursacht haben. Genau das ist **Backpropagation**.
+Stell dir vor, die Lese-Gruppe bekommt tausende Buchseiten zum Üben. Sie deckt das letzte Wort jedes Satzes ab und rät: *„Was kommt als Nächstes?"* Ein strenger Korrekteur vergleicht die Antwort mit dem echten Wort und notiert den **Fehler (Loss)**. Die Lese-Gruppe verbessert sich — aber nicht einfach durch „nochmal lesen". Der Korrekteur erklärt ihr rückwärts, welche Entscheidungen auf welchem Lese-Tisch den Fehler verursacht haben. Genau das ist **Backpropagation**.
 
 #### Schritt 1 — Forward Pass: Vorhersage treffen
 
@@ -531,9 +531,9 @@ Das Modell lernt damit ein neues Muster: *„Wenn das Token 'Assistent:' kommt, 
 Menschliche Bewerter vergleichen mehrere Antworten des Modells und wählen die beste. Aus diesen Bewertungen wird ein **Reward-Modell** trainiert, das vorhersagt, wie gut eine Antwort ist. Das Sprachmodell wird dann so trainiert, dass es möglichst hohe Belohnungen bekommt — ohne die Sprachfähigkeit zu verlieren.
 
 **Bibliotheks-Analogie:**
-Phase 1: Die AG liest wahllos alle Bücher in der Bibliothek.
+Phase 1: Die Lese-Gruppe liest wahllos alle Bücher in der Bibliothek.
 Phase 2: Ein Lehrer zeigt ihr, wie man Fragen beantwortet — mit Beispielen.
-Phase 3: Kunden der Bibliothek bewerten die Antworten mit 1–5 Sternen. Die AG lernt, was Kunden als hilfreich empfinden.
+Phase 3: Kunden der Bibliothek bewerten die Antworten mit 1–5 Sternen. Die Lese-Gruppe lernt, was Kunden als hilfreich empfinden.
 
 ### Der technische Kern bleibt identisch
 
