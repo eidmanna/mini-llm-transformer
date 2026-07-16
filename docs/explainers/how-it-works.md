@@ -341,15 +341,41 @@ optimizer.step()                         # Gewichte anpassen
 ```mermaid
 flowchart TD
     BATCH["Batch: zufällige Textausschnitte\naus dem Trainingstext"]
-    FWD["Forward Pass\nVorhersage für jede Position"]
+    FWD["Forward Pass — Matrizen werden gelesen\n• token_embedding.weight\n• position_embedding.weight\n• Head: key, query, value\n• MultiHead: proj\n• FeedForward: net[0], net[2]\n• ln1, ln2, ln_final (LayerNorm)\n• lm_head"]
     LOSS["Cross-Entropy Loss\nWie weit lag das Modell daneben?"]
-    BWD["Backward Pass\nGradienten berechnen"]
-    CLIP["Gradient Clipping\nmax_norm = 1.0"]
-    OPT["AdamW: Gewichte anpassen\nLernrate × Gradient"]
+    BWD["Backward Pass — Gradienten werden berechnet\nfür ALLE oben genannten Matrizen"]
+    CLIP["Gradient Clipping\nmax_norm = 1.0\nzu große Gradienten werden gekappt"]
+    OPT["AdamW: Gewichte anpassen\nALLE Matrizen werden aktualisiert:\nW ← W − lr × gradient"]
     SCH["LR-Scheduler\nLernrate langsam reduzieren"]
     NEXT["Nächste Iteration"]
 
     BATCH --> FWD --> LOSS --> BWD --> CLIP --> OPT --> SCH --> NEXT --> BATCH
+```
+
+#### Alle lernbaren Matrizen im Überblick
+
+Das sind die Gewichte, die `optimizer.step()` bei jedem Trainingsschritt verändert. Im simple-Modus (`n_embd=32`, `n_heads=4`, `n_layers=2`, `vocab_size=67`, `block_size=64`):
+
+| Matrix | Klasse | Größe (simple) | Was sie lernt | Code-Zeile |
+|---|---|---|---|---|
+| `token_embedding.weight` | `MiniTransformer` | 67 × 32 | Bedeutungs-Vektor pro Zeichen | [`model.py:157`](../../model.py:157) |
+| `position_embedding.weight` | `MiniTransformer` | 64 × 32 | Struktur-Vektor pro Position | [`model.py:158`](../../model.py:158) |
+| `heads[i].key.weight` | `Head` (× n_heads) | 32 × 8 | Wie ein Token sich „anbietet" | [`model.py:37`](../../model.py:37) |
+| `heads[i].query.weight` | `Head` (× n_heads) | 32 × 8 | Wonach ein Token „sucht" | [`model.py:38`](../../model.py:38) |
+| `heads[i].value.weight` | `Head` (× n_heads) | 32 × 8 | Was ein Token weitergibt | [`model.py:39`](../../model.py:39) |
+| `sa.proj.weight` | `MultiHeadAttention` | 32 × 32 | Wie Heads zusammengemischt werden | [`model.py:74`](../../model.py:74) |
+| `ff.net[0].weight` | `FeedForward` | 32 × 128 | Erster Denk-Schritt (Aufweiten) | [`model.py:94`](../../model.py:94) |
+| `ff.net[2].weight` | `FeedForward` | 128 × 32 | Zweiter Denk-Schritt (Zusammenziehen) | [`model.py:96`](../../model.py:96) |
+| `ln1.weight` / `ln1.bias` | `Block` | 32 / 32 | Skalierung vor Attention | [`model.py:119`](../../model.py:119) |
+| `ln2.weight` / `ln2.bias` | `Block` | 32 / 32 | Skalierung vor FFN | [`model.py:120`](../../model.py:120) |
+| `ln_final.weight` / `bias` | `MiniTransformer` | 32 / 32 | Letzte Normierung | [`model.py:162`](../../model.py:162) |
+| `lm_head.weight` | `MiniTransformer` | 32 × 67 | Vektor → Wahrscheinlichkeit pro Zeichen | [`model.py:163`](../../model.py:163) |
+
+> **Hinweis Größen:** `heads[i]` gibt es `n_heads=4` Mal, `Block`-Matrizen `n_layers=2` Mal. Die `ff.net[0]`-Matrix ist `4 × n_embd` breit — der klassische GPT-4×-Faktor.
+
+Die Gesamtzahl aller Parameter im Debugger prüfen:
+```python
+sum(p.numel() for p in model.parameters())
 ```
 
 Die Trainings-Schleife läuft je nach Modus unterschiedlich lange:
