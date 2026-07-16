@@ -56,6 +56,33 @@ flowchart TD
 
 ---
 
+### Wo stecken neuronale Netze?
+
+Der MiniTransformer ist vollständig aus PyTorch-Modulen (`nn.Module`) aufgebaut. Die folgende Tabelle zeigt alle lernbaren Komponenten auf einen Blick — mit Verweis auf die exakte Zeile in [`model.py`](model.py):
+
+| Komponente | PyTorch-Klasse | Codezeile | Aufgabe |
+|---|---|---|---|
+| Token-Embedding | `nn.Embedding(vocab_size, n_embd)` | [`model.py:157`](model.py:157) | Token-ID → Bedeutungsvektor |
+| Positions-Embedding | `nn.Embedding(block_size, n_embd)` | [`model.py:158`](model.py:158) | Position → Positionsvektor |
+| Query-Projektion (pro Head) | `nn.Linear(n_embd, head_size, bias=False)` | [`model.py:38`](model.py:38) | Erzeugt die Suchanfrage eines Tokens |
+| Key-Projektion (pro Head) | `nn.Linear(n_embd, head_size, bias=False)` | [`model.py:37`](model.py:37) | Erzeugt das Angebot eines Tokens |
+| Value-Projektion (pro Head) | `nn.Linear(n_embd, head_size, bias=False)` | [`model.py:39`](model.py:39) | Erzeugt den Inhalt, der weitergereicht wird |
+| Attention-Ausgabeprojektion | `nn.Linear(n_heads × head_size, n_embd)` | [`model.py:74`](model.py:74) | Fasst alle Heads auf Modell-Dimension zusammen |
+| FFN Schicht 1 (Expansion) | `nn.Linear(n_embd, 4 * n_embd)` | [`model.py:94`](model.py:94) | Weitet Repräsentation auf |
+| ReLU | `nn.ReLU()` | [`model.py:95`](model.py:95) | Nichtlinearität — negative Werte → 0 |
+| FFN Schicht 2 (Kompression) | `nn.Linear(4 * n_embd, n_embd)` | [`model.py:96`](model.py:96) | Komprimiert zurück auf Modell-Dimension |
+| LayerNorm 1 (vor Attention) | `nn.LayerNorm(n_embd)` | [`model.py:119`](model.py:119) | Normiert Aktivierungen vor Attention |
+| LayerNorm 2 (vor FFN) | `nn.LayerNorm(n_embd)` | [`model.py:120`](model.py:120) | Normiert Aktivierungen vor FFN |
+| LayerNorm final | `nn.LayerNorm(n_embd)` | [`model.py:162`](model.py:162) | Normiert nach allen Blöcken |
+| Language Model Head | `nn.Linear(n_embd, vocab_size)` | [`model.py:163`](model.py:163) | Vektor → Logits über gesamtes Vokabular |
+| Dropout | `nn.Dropout(dropout)` | [`model.py:42`](model.py:42), [`model.py:75`](model.py:75), [`model.py:97`](model.py:97) | Regularisierung: zufälliges Abschalten von Verbindungen |
+
+> **Nicht-lernbare Operationen:** Die kausale Maske (`tril`), Softmax, Scaled-Dot-Product, Residual-Addition und Top-k-Sampling sind feste Rechenoperationen ohne Gewichte.
+
+> **Training:** Der AdamW-Optimizer ([`train.py:339`](train.py:339)) aktualisiert alle Gewichte gleichzeitig mit individuell adaptierten Lernraten. Gradient Clipping ([`train.py:398`](train.py:398)) begrenzt alle Updates auf `max_norm=1.0`.
+
+---
+
 ## 2. Vom Text zu Zahlen
 
 Neuronale Netze arbeiten mit Zahlen, nicht mit Text. Der erste Schritt ist daher die **Tokenisierung**: Text wird in eine Folge von Ganzzahlen (Token-IDs) umgewandelt. Das Projekt bietet zwei Tokenizer-Implementierungen in [`tokenizer.py`](tokenizer.py), wählbar über den `--tokenizer`-Parameter in [`train.py`](train.py).
@@ -155,7 +182,9 @@ BPETokenizer   →   3 Tokens:  ["Trans","form","er"]
 
 ### 2.3 Token-Embedding
 
-Ein Embedding ist eine **Lookup-Tabelle**: Für jeden der `vocab_size` Token-Typen gibt es einen lernbaren Vektor der Größe `n_embd`. 
+Ein Embedding ist eine **Lookup-Tabelle**: Für jeden der `vocab_size` Token-Typen gibt es einen lernbaren Vektor der Größe `n_embd`.
+
+> **Neuronales Netz:** `nn.Embedding(vocab_size, n_embd)` — eine Matrix mit `vocab_size × n_embd` lernbaren Gewichten ([`model.py:157`](model.py:157)). Forward Pass = Zeilenauswahl per Index. Backward Pass = Gradient fließt nur in die ausgewählte Zeile zurück. Keine Aktivierungsfunktion.
 
 ```mermaid
 flowchart LR
@@ -196,6 +225,8 @@ flowchart LR
     style D fill:#dbeafe,stroke:#3b82d4
 ```
 
+> **Neuronales Netz:** `nn.Embedding(block_size, n_embd)` — identische Bauart wie das Token-Embedding, aber mit `block_size` Zeilen, eine pro möglicher Position 0 … `block_size − 1` ([`model.py:158`](model.py:158)). Wird zum Token-Embedding **addiert** (nicht konkateniert), sodass die Ausgabe weiterhin Form `(B, T, n_embd)` hat.
+
 ---
 
 ## 3. Der Attention-Mechanismus
@@ -205,6 +236,8 @@ Dies ist der **Kern des Transformers**. Der Attention-Mechanismus entscheidet f�
 Implementiert in der Klasse [`Head`](model.py:27).
 
 ### 3.1 Query, Key, Value
+
+> **Neuronale Netze (pro Head):** Drei `nn.Linear(n_embd, head_size, bias=False)`-Schichten — `self.key`, `self.query`, `self.value` ([`model.py:37-39`](model.py:37)). Keine Bias-Terme (empirisch ausreichend und reduziert Parameterzahl). Keine Aktivierungsfunktion — es sind reine lineare Projektionen, die den Eingangsvektor in drei verschiedene Unterräume drehen.
 
 Jeder Eingabe-Vektor wird durch drei separate lineare Projektionen in drei Rollen umgewandelt:
 
@@ -340,7 +373,15 @@ class MultiHeadAttention(nn.Module):
 
 ## 5. Feed-Forward-Netz
 
-Nach der Attention folgt ein einfaches **2-schichtiges MLP** (Multi-Layer Perceptron), das **positionsweise** arbeitet – d.h. jede Position im Kontext wird unabhängig von den anderen transformiert.
+Nach der Attention folgt ein einfaches **2-schichtiges MLP** (Multi-Layer Perceptron), das **positionsweise** arbeitet — d.h. jede Position im Kontext wird unabhängig von den anderen transformiert.
+
+> **Neuronale Netze:** `nn.Sequential` aus [`model.py:93-98`](model.py:93):
+> 1. `nn.Linear(n_embd, 4 * n_embd)` — Expansion (z. B. 96 → 384 Neuronen im advanced-Modus)
+> 2. `nn.ReLU()` — einzige Nichtlinearität im gesamten FFN; setzt negative Aktivierungen auf 0
+> 3. `nn.Linear(4 * n_embd, n_embd)` — Kompression zurück auf Modell-Dimension
+> 4. `nn.Dropout(dropout)` — Regularisierung während des Trainings
+>
+> Dies ist der **einzige Teil** des Transformers, der wie ein klassisches MLP aufgebaut ist. Die Attention-Projektionen sind ebenfalls lineare Schichten, aber ohne Aktivierungsfunktion.
 
 ```mermaid
 flowchart LR
@@ -400,6 +441,8 @@ def forward(self, x):
     x = x + self.ff(self.ln2(x))   # Residual um FFN
     return x
 ```
+
+> **Neuronale Netze im Block:** Pro Block sind **`3 × n_heads + 3` lernbare Schichten** aktiv: `n_heads × 3` Linear-Projektionen (Q, K, V), 1 Attention-Ausgabeprojektion, 2 FFN-Linear-Schichten, 2 LayerNorm-Instanzen (je mit `γ`/`β`-Gewichten). Die Residual-Addition (`+`) und LayerNorm selbst sind keine Neuronen — LayerNorm hat aber lernbare Skalierungs-/Verschiebeparameter ([`model.py:119-120`](model.py:119)).
 
 ### 6.1 Warum Residual-Verbindungen?
 
@@ -462,6 +505,8 @@ flowchart TD
     style LOSS fill:#fef3c7,stroke:#f59e0b
     style GEN fill:#f0fdf4,stroke:#22c55e
 ```
+
+> **Lernbare Parameter gesamt:** `sum(p.numel() for p in model.parameters())` — ausgegeben beim Start von `train.py` ([`train.py:316`](train.py:316)). Im simple-Modus (~32k), im advanced-Modus (~300k Parameter.
 
 ### 7.1 Parameter-Initialisierung
 
@@ -562,7 +607,7 @@ AdamW ist eine Variante von Adam (Adaptive Moment Estimation), die Weight Decay 
 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 ```
 
-Wenn Gradienten sehr groß werden (*exploding gradients*), kann ein einziger Update-Schritt das Modell destabilisieren. Gradient Clipping begrenzt die Norm des Gesamt-Gradienten auf `max_norm=1.0`.
+Wenn Gradienten sehr groß werden (*exploding gradients*), kann ein einziger Update-Schritt das Modell destabilisieren. Gradient Clipping begrenzt die L2-Norm des **gesamten** Gradientenvektors über alle lernbaren Parameter auf `max_norm=1.0` ([`train.py:398`](train.py:398)). Das betrifft alle `nn.Linear`-, `nn.Embedding`- und `nn.LayerNorm`-Gewichte gleichzeitig.
 
 ### 8.5 Lernraten-Scheduler
 
@@ -695,6 +740,7 @@ flowchart LR
 
 ### Quellen und weiterführende Lektüre
 
+- **Neuronale Netze einfach erklärt:** [docs/explainers/neural-networks.md](docs/explainers/neural-networks.md) — Grundbausteine (`nn.Linear`, `ReLU`, `nn.Embedding`) und alle Einsatzstellen in `model.py`
 - **Original Paper:** [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (Vaswani et al., 2017)
 - **GPT-Stil Decoder-Only:** [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) (GPT-2, 2019)
 - **BPE-Originalarbeit:** [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909) (Sennrich et al., 2016)

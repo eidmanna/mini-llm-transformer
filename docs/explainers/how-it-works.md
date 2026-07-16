@@ -41,6 +41,8 @@ tok_emb = self.token_embedding(idx)   # (B, T, n_embd)
 
 > 📍 **Debugger-Haltepunkt:** [`model.py:184`](../../model.py:184) — hier siehst du `tok_emb` mit Form `(batch_size, T, n_embd)`.
 
+> 🧠 **Neuronales Netz hier:** [`nn.Embedding(vocab_size, n_embd)`](../../model.py:157) — eine **lernbare Lookup-Tabelle**. Jede der `vocab_size` Zeilen ist ein Gewichtsvektor der Länge `n_embd`. Beim Forward Pass wird einfach die Zeile mit der passenden Token-ID herausgelesen. Beim Backward Pass aktualisiert AdamW genau diese Zeile. Es gibt keine Aktivierungsfunktion — das Embedding ist eine rein lineare Transformation von einer Ganzzahl in einen Vektor.
+
 | Fachwort | Lernhilfe |
 |---|---|
 | **Token** | Ein Stück Text — hier: einzelnes Zeichen oder Silbe. Denk an Legostein. |
@@ -64,6 +66,8 @@ x = tok_emb + pos_emb   # addiert: gleiche Form bleibt (B, T, n_embd)
 ```
 
 > 📍 **Debugger-Haltepunkt:** [`model.py:185-186`](../../model.py:185) — nach Zeile 186 enthält `x` die Summe aus Token- und Positions-Embedding.
+
+> 🧠 **Neuronales Netz hier:** [`nn.Embedding(block_size, n_embd)`](../../model.py:158) — dieselbe Bauart wie das Token-Embedding, aber für Positionen: `block_size` lernbare Zeilen, eine pro möglicher Position (0 bis `block_size − 1`). Die Werte werden **addiert**, nicht konkateniert — der Vektor für „Katze an Position 3" ist also wirklich die Summe zweier gelernter Vektoren.
 
 | Fachwort | Lernhilfe |
 |---|---|
@@ -142,6 +146,8 @@ out = torch.cat([h(x) for h in self.heads], dim=-1)  # Alle Heads zusammenklappe
 return self.dropout(self.proj(out))                    # Auf n_embd projizieren
 ```
 
+> 🧠 **Neuronale Netze hier (pro Head):** Drei [`nn.Linear`](../../model.py:37)-Schichten **ohne Bias** — je eine für Query, Key und Value. Jede projiziert `n_embd → head_size`. Das sind die einzigen lernbaren Teile eines Heads; die Softmax-Gewichtung und die Multiplikation mit V sind feste Rechenoperationen. Nach dem Zusammenfügen aller Heads folgt eine weitere [`nn.Linear(n_heads × head_size, n_embd)`](../../model.py:74)-Projektion, die die Ausgaben wieder auf die Modell-Dimension bringt. [`nn.Dropout`](../../model.py:75) schaltet während des Trainings zufällig Attention-Gewichte ab (Regularisierung).
+
 > 📍 **Debugger-Haltepunkte:**
 > - [`model.py:46-57`](../../model.py:46) (`Head.forward`) — `k`, `q`, `wei` nach Scaled-Dot-Product, Maske und Softmax inspizieren
 > - [`model.py:78`](../../model.py:78) (`MultiHeadAttention.forward`) — `out` enthält alle Heads zusammengeklappt
@@ -175,6 +181,8 @@ self.net = nn.Sequential(
 )
 ```
 
+> 🧠 **Neuronales Netz hier:** Das ist das **einzige klassische MLP** im gesamten Transformer. Es besteht aus zwei [`nn.Linear`](../../model.py:94)-Schichten mit [`nn.ReLU`](../../model.py:95) dazwischen. Die erste Schicht weitet von `n_embd` auf `4 × n_embd` auf (im advanced-Modus: 96 → 384 Neuronen) — hier entsteht der eigentliche Ausdrucksraum. Die zweite Schicht komprimiert wieder zurück. Jedes Token wird dabei **völlig unabhängig** vom selben Netz verarbeitet; es gibt keine Kommunikation zwischen Positionen (das war schon Aufgabe der Attention).
+
 > 📍 **Debugger-Haltepunkt:** [`model.py:100-101`](../../model.py:100) (`FeedForward.forward`) — `x` vor und nach `self.net(x)` vergleichen: gleiche Form, andere Werte.
 
 | Fachwort | Lernhilfe |
@@ -204,6 +212,8 @@ x = x + self.ff(self.ln2(x))   # FFN-Ergebnis wird zum Eingang addiert
 
 ### Layer Normalization — „Gleiche Maßstäbe"
 
+> 🧠 **Neuronales Netz hier:** Zwei [`nn.LayerNorm(n_embd)`](../../model.py:119)-Instanzen pro Block — `ln1` vor der Attention, `ln2` vor dem FFN (Pre-Norm). LayerNorm hat lernbare Skalierungs- (`γ`) und Verschiebegewichte (`β`) pro Dimension, aber sie sind keine Neuronen im klassischen Sinne: sie halten keine semantischen Informationen, sondern stabilisieren nur die Zahlenbereiche. Die finale [`nn.LayerNorm`](../../model.py:162) nach allen Blöcken gehört zum Hauptmodell.
+
 Vor jedem Block wird der Vektor normiert (Mittelwert → 0, Varianz → 1). Verhindert, dass einzelne Werte explodieren.
 
 **Analogie:** Alle Schüler einer Klasse bekommen Noten auf der gleichen Skala (1–6), egal wie schwer der Test war.
@@ -225,6 +235,8 @@ Der letzte Vektor jedes Tokens wird auf die Größe des Vokabulars projiziert. D
 x = self.ln_final(x)       # Letzte Normierung
 logits = self.lm_head(x)   # (B, T, vocab_size) — ein Score pro möglichem Zeichen
 ```
+
+> 🧠 **Neuronales Netz hier:** [`nn.Linear(n_embd, vocab_size)`](../../model.py:163) **ohne Bias** (sog. Language Model Head). Diese Schicht hat keine Aktivierungsfunktion — sie produziert rohe Logits, eine Zahl pro möglichem Token. Beim Training wandelt `F.cross_entropy` diese Logits intern in Wahrscheinlichkeiten um und berechnet den Loss. Bei der Generierung macht das `F.softmax` explizit (nach optionaler Temperature-Skalierung und Top-k-Filterung).
 
 > 📍 **Debugger-Haltepunkt:** [`model.py:189-195`](../../model.py:189) (`MiniTransformer.forward`) — `logits` hat Form `(B, T, vocab_size)`; `loss` ist ein Skalar. Beim Inspizieren von `logits[0, -1]` siehst du die Rohscores für das nächste Token.
 
@@ -617,4 +629,5 @@ uv run python train.py --max_iters 500   # simple + kürzeres Training
 |---|---|
 | [`math-basics.md`](math-basics.md) | Vektor · Matrix · Tensor — visueller Crashkurs |
 | [`attention-head.md`](attention-head.md) | `class Head` — Scaled Dot-Product Attention Schritt für Schritt |
+| [`neural-networks.md`](neural-networks.md) | Was neuronale Netze sind und wo genau sie in `model.py` stecken |
 | [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) | Technische Architektur-Referenz: Tokenizer (Kap. 2), Attention (Kap. 3–4), Training (Kap. 8), Hyperparameter (Kap. 10) |
