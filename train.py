@@ -6,12 +6,19 @@ train.py – Trainings-Skript für den Mini-Transformer
 ════════════════════════════════════════════════════════════════════════════════
 
 Starte das Training:
-  uv run python train.py
+  uv run python train.py                   # simple-Modus (Standard)
+  uv run python train.py --mode simple     # explizit simple-Modus
+  uv run python train.py --mode advanced   # advanced-Modus (großer Datensatz)
+
+Einzelne Parameter übersteuern:
+  uv run python train.py --max_iters 1000 --learning_rate 5e-4
+  uv run python train.py --mode advanced --batch_size 64
 
 Tipp: Ändere die Werte im CONFIG-Block und beobachte, wie sich Training-Kurve
 und generierter Text verändern.
 """
 
+import argparse
 import os
 import time
 import torch
@@ -19,89 +26,138 @@ from model import MiniTransformer
 from tokenizer import build_tokenizer, Tokenizer
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  ░░  EXPERIMENTIER-ZENTRALE – Hier kannst du alle Werte verändern  ░░
+#  ░░  VOREINSTELLUNGEN – Zwei Modi als Schnellkonfiguration  ░░
 # ══════════════════════════════════════════════════════════════════════════════
-CONFIG = {
-    # ── Daten ──────────────────────────────────────────────────────────────
-    "data_path": "data/training_text.txt",
 
-    # ── Tokenizer ──────────────────────────────────────────────────────────
-    #   "bpe"  → Byte Pair Encoding: lernt Subword-Tokens (empfohlen)
-    #   "char" → Zeichen-Level: jedes Zeichen = ein Token (wie bisher)
-    "tokenizer": "bpe",
-
-    #   Vokabular-Größe für BPE (wird bei "char" ignoriert).
-    #   Empfehlung: 500 (minimal) | 2000 (Standard) | 4000 (größer/langsamer)
-    #   Faustregel: ~1 Merge-Step pro ~200 Zeichen Trainingstext
-    "bpe_vocab_size": 2000,
-
-    # ── Kontextlänge ───────────────────────────────────────────────────────
-    #   Wie viele TOKENS das Modell gleichzeitig als Kontext bekommt.
-    #   Mit BPE entspricht 1 Token ~2-4 Zeichen → effektiv mehr Kontext.
-    #   Kleiner → schneller, aber weniger Zusammenhang.
-    #   Empfehlung: 32 (schnell) | 64 (Standard) | 128 (langsamer, besser)
-    "block_size": 128,
-
-    # ── Batch-Größe ────────────────────────────────────────────────────────
-    #   Wie viele Textausschnitte gleichzeitig verarbeitet werden.
-    #   Kleiner → weniger RAM, rauschigere Updates.
-    #   Empfehlung: 16 (sparsam) | 32 (Standard) | 64 (mehr RAM nötig)
-    "batch_size": 32,
-
-    # ── Trainings-Dauer ────────────────────────────────────────────────────
-    #   Erhöhe max_iters für längeres Training.
-    #   Auf Intel-Mac-CPU: 3000 ≈ 5 Min | 6000 ≈ 10 Min
-    "max_iters": 6000,
-
-    # ── Lernrate ───────────────────────────────────────────────────────────
-    #   Zu hoch → Training explodiert, zu niedrig → zu langsam.
-    #   Empfehlung: 1e-3 (Start) → bei Plateau auf 1e-4 reduzieren
-    "learning_rate": 1e-3,
-
-    # ── Lernraten-Scheduler ────────────────────────────────────────────────
-    #   True → Lernrate nimmt über das Training linear ab (oft besser)
-    #   False → konstante Lernrate
+# ── simple-Modus: kurzer Trainingstext, Zeichen-Tokenizer, kleines Modell ──
+CONFIG_SIMPLE = {
+    "data_path":       "data/training_text_simple.txt",
+    "tokenizer":       "char",
+    "bpe_vocab_size":  200,          # wird bei char ignoriert
+    "block_size":      64,
+    "batch_size":      16,
+    "max_iters":       1000,
+    "learning_rate":   1e-3,
     "use_lr_scheduler": True,
-
-    # ── Zwischen-Evaluierung ───────────────────────────────────────────────
-    #   Alle X Iterationen: Loss ausgeben + kurzen Text generieren.
-    #   Empfehlung: 250 (viel Feedback) | 500 (Standard) | 1000 (wenig)
-    "eval_interval": 250,
-
-    # ── Trainings/Validierungs-Split ───────────────────────────────────────
-    #   Anteil der Daten für das Training (Rest = Validierung).
-    "train_split": 0.9,
-
-    # ── Modell-Architektur ─────────────────────────────────────────────────
-    #   n_embd  : Embedding-Dimension (Breite des Modells)
-    #             Kleiner → schneller | 32 (minimal) | 64 | 128 | 256
-    #   n_heads : Anzahl Attention-Heads (n_embd muss durch n_heads teilbar sein!)
-    #             Typisch: n_embd=64 → n_heads=4 | n_embd=128 → n_heads=8
-    #   n_layers: Anzahl gestapelter Transformer-Blöcke (Tiefe des Modells)
-    #             1 = sehr flach, 4 = Standard für Mini-Modelle, 6 = tiefer
-    "n_embd":   96,
-    "n_heads":  6,
-    "n_layers": 4,
-
-    # ── Regularisierung ────────────────────────────────────────────────────
-    #   Dropout verhindert Überanpassung. Bei kleinen Daten eher niedrig halten.
-    #   Empfehlung: 0.0 (aus) | 0.1 (leicht) | 0.2 (Standard)
-    "dropout": 0.2,
-
-    # ── Text-Generierung ───────────────────────────────────────────────────
-    #   Startwort für die Zwischen-Generierung während des Trainings.
-    "gen_start_text":  "Der",
-    #   Anzahl der Zeichen, die pro Zwischen-Generierung erzeugt werden.
-    "gen_max_tokens":  120,
-    #   Temperature: < 1.0 → konservativer | 1.0 → neutral | > 1.0 → kreativer
+    "eval_interval":   100,
+    "train_split":     0.9,
+    "n_embd":          32,
+    "n_heads":         4,
+    "n_layers":        2,
+    "dropout":         0.0,
+    "gen_start_text":  "Die",
+    "gen_max_tokens":  80,
     "gen_temperature": 0.8,
-    #   Top-K: Nur die k wahrscheinlichsten Kandidaten (None = alle)
-    "gen_top_k":       40,
-
-    # ── Reproduzierbarkeit ─────────────────────────────────────────────────
-    "seed": 42,
+    "gen_top_k":       20,
+    "seed":            42,
 }
+
+# ── advanced-Modus: großer Trainingstext, BPE, Standard-Architektur ─────────
+CONFIG_ADVANCED = {
+    "data_path":       "data/training_text.txt",
+    "tokenizer":       "bpe",
+    "bpe_vocab_size":  2000,
+    "block_size":      128,
+    "batch_size":      32,
+    "max_iters":       6000,
+    "learning_rate":   1e-3,
+    "use_lr_scheduler": True,
+    "eval_interval":   250,
+    "train_split":     0.9,
+    "n_embd":          96,
+    "n_heads":         6,
+    "n_layers":        4,
+    "dropout":         0.2,
+    "gen_start_text":  "Der",
+    "gen_max_tokens":  120,
+    "gen_temperature": 0.8,
+    "gen_top_k":       40,
+    "seed":            42,
+}
+
+PRESETS = {
+    "simple":   CONFIG_SIMPLE,
+    "advanced": CONFIG_ADVANCED,
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI-Argumente
+# ──────────────────────────────────────────────────────────────────────────────
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Mini-Transformer Training",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    # ── Modus ─────────────────────────────────────────────────────────────────
+    p.add_argument(
+        "--mode",
+        choices=["simple", "advanced"],
+        default="simple",
+        help="Voreinstellung: 'simple' (kurzer Text, char-Tokenizer, kleines Modell) "
+             "oder 'advanced' (großer Text, BPE, Standard-Architektur). "
+             "Alle übrigen Flags übersteuern den Modus.",
+    )
+
+    # ── Daten ─────────────────────────────────────────────────────────────────
+    p.add_argument("--data_path",      type=str,   default=None, help="Pfad zum Trainingstext")
+
+    # ── Tokenizer ─────────────────────────────────────────────────────────────
+    p.add_argument("--tokenizer",      type=str,   default=None, choices=["char", "bpe"],
+                   help="Tokenizer: 'char' oder 'bpe'")
+    p.add_argument("--bpe_vocab_size", type=int,   default=None, help="BPE-Vokabular-Größe")
+
+    # ── Modell ────────────────────────────────────────────────────────────────
+    p.add_argument("--block_size",     type=int,   default=None, help="Kontext-Länge in Tokens")
+    p.add_argument("--n_embd",         type=int,   default=None, help="Embedding-Dimension")
+    p.add_argument("--n_heads",        type=int,   default=None, help="Anzahl Attention-Heads")
+    p.add_argument("--n_layers",       type=int,   default=None, help="Anzahl Transformer-Blöcke")
+    p.add_argument("--dropout",        type=float, default=None, help="Dropout-Rate")
+
+    # ── Training ──────────────────────────────────────────────────────────────
+    p.add_argument("--batch_size",     type=int,   default=None, help="Batch-Größe")
+    p.add_argument("--max_iters",      type=int,   default=None, help="Maximale Trainings-Iterationen")
+    p.add_argument("--learning_rate",  type=float, default=None, help="Lernrate")
+    p.add_argument("--use_lr_scheduler", type=lambda x: x.lower() in ("true", "1", "yes"),
+                   default=None, metavar="BOOL", help="Lernraten-Scheduler (true/false)")
+    p.add_argument("--eval_interval",  type=int,   default=None, help="Evaluierungs-Intervall")
+    p.add_argument("--train_split",    type=float, default=None, help="Train-Anteil (0–1)")
+    p.add_argument("--seed",           type=int,   default=None, help="Zufalls-Seed")
+
+    # ── Generierung ───────────────────────────────────────────────────────────
+    p.add_argument("--gen_start_text",  type=str,   default=None, help="Starttext für Zwischen-Generierung")
+    p.add_argument("--gen_max_tokens",  type=int,   default=None, help="Max. Tokens pro Zwischen-Generierung")
+    p.add_argument("--gen_temperature", type=float, default=None, help="Sampling-Temperatur")
+    p.add_argument("--gen_top_k",       type=int,   default=None, help="Top-K Sampling (0 = deaktiviert)")
+
+    return p.parse_args()
+
+
+def build_config(args: argparse.Namespace) -> dict:
+    """Modus-Voreinstellung laden und mit expliziten CLI-Werten übersteuern."""
+    cfg = dict(PRESETS[args.mode])   # Kopie des Presets
+
+    overridable = [
+        "data_path", "tokenizer", "bpe_vocab_size",
+        "block_size", "n_embd", "n_heads", "n_layers", "dropout",
+        "batch_size", "max_iters", "learning_rate", "use_lr_scheduler",
+        "eval_interval", "train_split", "seed",
+        "gen_start_text", "gen_max_tokens", "gen_temperature", "gen_top_k",
+    ]
+    for key in overridable:
+        val = getattr(args, key, None)
+        if val is not None:
+            cfg[key] = val
+
+    # gen_top_k=0 → None (= kein Top-K Sampling)
+    if cfg.get("gen_top_k") == 0:
+        cfg["gen_top_k"] = None
+
+    return cfg
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,7 +244,8 @@ def format_duration(seconds: float) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    cfg = CONFIG
+    args = parse_args()
+    cfg  = build_config(args)
 
     # ── Reproduzierbarkeit ──────────────────────────────────────────────────
     torch.manual_seed(cfg["seed"])
@@ -203,6 +260,7 @@ def main() -> None:
     print(f"\n{'═'*65}")
     print("  Mini-Transformer – Lernexperiment")
     print(f"{'═'*65}")
+    print(f"  Modus          : {args.mode}")
     print(f"  Gerät          : {device}")
 
     # ── Daten laden & Tokenizer trainieren ─────────────────────────────────

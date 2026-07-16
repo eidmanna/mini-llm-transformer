@@ -10,9 +10,21 @@ Ein vollständiger, lernbarer **Decoder-Only Transformer von Grund auf** – als
 # 1. Abhängigkeiten installieren (einmalig)
 uv sync --python 3.12
 
-# 2. Training starten
+# 2. Training starten — simple-Modus (Standard, ~1–2 Min)
 uv run python train.py
+
+# Oder: advanced-Modus mit großem Trainingstext und BPE (~10 Min)
+uv run python train.py --mode advanced
+
+# Einzelne Parameter übersteuern — Modus bleibt als Basis
+uv run python train.py --max_iters 500
+uv run python train.py --mode advanced --batch_size 64
 ```
+
+| Modus | Datei | Tokenizer | Modell | Iterationen |
+|---|---|---|---|---|
+| **simple** *(Standard)* | `training_text_simple.txt` | char | klein (32/4/2) | 1 000 |
+| **advanced** | `training_text.txt` | BPE | mittel (96/6/4) | 6 000 |
 
 Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den aktuellen Loss sowie einen generierten Textschnipsel aus.
 
@@ -36,7 +48,8 @@ Das Training läuft auf der CPU und gibt alle `eval_interval` Iterationen den ak
 │       ├── math-basics.md  # Vektor · Matrix · Tensor — Crashkurs
 │       └── attention-head.md  # Scaled Dot-Product Attention erklärt
 └── data/
-    └── training_text.txt   # Deutschsprachiger Trainingstext (~5.300 Zeichen)
+    ├── training_text.txt         # Großer Trainingstext (~5.300+ Zeichen, advanced-Modus)
+    └── training_text_simple.txt  # Kurzer Trainingstext (~3.800 Zeichen, simple-Modus)
 ```
 
 ---

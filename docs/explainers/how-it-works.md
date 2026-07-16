@@ -318,19 +318,26 @@ optimizer.step()                         # Gewichte anpassen
 
 ```mermaid
 flowchart TD
-    BATCH["Batch: 32 zufällige Textausschnitte\naus training_text.txt"]
+    BATCH["Batch: zufällige Textausschnitte\naus dem Trainingstext"]
     FWD["Forward Pass\nVorhersage für jede Position"]
     LOSS["Cross-Entropy Loss\nWie weit lag das Modell daneben?"]
     BWD["Backward Pass\nGradienten berechnen"]
     CLIP["Gradient Clipping\nmax_norm = 1.0"]
     OPT["AdamW: Gewichte anpassen\nLernrate × Gradient"]
     SCH["LR-Scheduler\nLernrate langsam reduzieren"]
-    NEXT["Nächste Iteration\n(6.000 × insgesamt)"]
+    NEXT["Nächste Iteration"]
 
     BATCH --> FWD --> LOSS --> BWD --> CLIP --> OPT --> SCH --> NEXT --> BATCH
 ```
 
-**6.000 Iterationen × 32 Batches** = das Modell sieht ~192.000 Beispiele. Nach jeder `eval_interval`-ten Iteration wird der aktuelle Loss ausgegeben und ein Textschnipsel generiert — man sieht live, wie die Sprache besser wird.
+Die Trainings-Schleife läuft je nach Modus unterschiedlich lange:
+
+| Modus | Iterationen | Batch-Größe | Trainingstext |
+|---|---|---|---|
+| **simple** *(Standard)* | 1 000 | 16 | `training_text_simple.txt` (~3 800 Zeichen) |
+| **advanced** | 6 000 | 32 | `training_text.txt` (≥ 5 000 Zeichen) |
+
+Im **advanced**-Modus gilt: **6.000 × 32 Batches** = das Modell sieht ~192.000 Beispiele. Nach jeder `eval_interval`-ten Iteration wird der aktuelle Loss ausgegeben und ein Textschnipsel generiert — man sieht live, wie die Sprache besser wird.
 
 | Fachwort | Lernhilfe |
 |---|---|
@@ -475,6 +482,33 @@ flowchart LR
 | **RLHF** | Menschen bewerten Ausgaben, ein Reward-Modell lernt daraus, das Sprachmodell optimiert sich darauf. |
 | **Instruction Tuning** | Oberbegriff für SFT mit Anweisungs-Daten. Macht aus einem Textgenerator einen Assistenten. |
 | **System-Prompt** | Versteckter Text am Anfang des Kontexts bei ChatGPT & Co., der dem Modell sagt, wie es sich verhalten soll. |
+
+---
+
+## Trainings-Modi — simple vs. advanced
+
+`train.py` startet per Voreinstellung im **simple**-Modus. Der Modus setzt alle Parameter auf sinnvolle Standardwerte für den jeweiligen Anwendungsfall; einzelne Werte können per CLI-Flag übersteuert werden.
+
+```bash
+uv run python train.py                   # simple (Standard)
+uv run python train.py --mode advanced   # advanced
+uv run python train.py --max_iters 500   # simple + kürzeres Training
+```
+
+| Parameter | simple | advanced | Warum der Unterschied? |
+|---|---|---|---|
+| `data_path` | `training_text_simple.txt` | `training_text.txt` | kurzer vs. großer Trainingstext |
+| `tokenizer` | `char` | `bpe` | Zeichenebene reicht für wenig Text; BPE verdichtet große Texte |
+| `bpe_vocab_size` | 200 *(ignoriert)* | 2 000 | BPE braucht ausreichend Text für sinnvolle Merges |
+| `block_size` | 64 | 128 | kurzer Text → kurzer Kontext genügt |
+| `batch_size` | 16 | 32 | weniger Tokens → kleinere Batches |
+| `max_iters` | 1 000 | 6 000 | kleines Modell auf kleinem Text konvergiert schnell |
+| `n_embd` | 32 | 96 | kleines Vokabular → kleinere Embeddings |
+| `n_heads` | 4 | 6 | muss `n_embd` teilen: 32/4=8, 96/6=16 |
+| `n_layers` | 2 | 4 | weniger Text → weniger Tiefe nötig |
+| `dropout` | 0.0 | 0.2 | kurze Texte tendieren schneller zu Overfitting; `dropout=0` lässt zunächst freies Lernen zu |
+
+> **Merksatz:** *simple* = alles klein und schnell — zum Ausprobieren und Verstehen. *advanced* = der vollständige Trainingspfad, der die Stärken von BPE und einem tieferen Modell ausschöpft.
 
 ---
 

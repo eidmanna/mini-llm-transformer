@@ -52,18 +52,70 @@ uv automatically creates an isolated virtual environment under `.venv/` and inst
 
 ## 3. Starting Training
 
+`train.py` provides two built-in **modes** as quick configurations. All other parameters can additionally be passed as flags and override the mode defaults.
+
+### Modes
+
+| Mode | Command | File | Tokenizer | Model | Iterations |
+|---|---|---|---|---|---|
+| **simple** *(default)* | `uv run python train.py` | `training_text_simple.txt` | char | small (32/4/2) | 1,000 |
+| **advanced** | `uv run python train.py --mode advanced` | `training_text.txt` | BPE | medium (96/6/4) | 6,000 |
+
 ```bash
+# simple mode — short text, character tokenizer, small model (default)
 uv run python train.py
+
+# advanced mode — large text, BPE, standard architecture
+uv run python train.py --mode advanced
+
+# Override individual parameters (mode serves as baseline)
+uv run python train.py --max_iters 500
+uv run python train.py --mode advanced --batch_size 64
+uv run python train.py --mode simple --tokenizer bpe --bpe_vocab_size 300
 ```
 
-The script runs entirely on the CPU. Typical runtime on an Intel Mac:
+The script runs entirely on the CPU. Typical runtimes on an Intel Mac:
 
-| `max_iters` | Approximate duration |
-|---|---|
-| 3,000 | ~5 minutes |
-| 5,000 | ~8–10 minutes |
+| Mode | `max_iters` | Approximate duration |
+|---|---|---|
+| simple | 1,000 | ~1–2 minutes |
+| advanced | 3,000 | ~5 minutes |
+| advanced | 6,000 | ~10 minutes |
 
 After completion the model is automatically saved as `model_checkpoint.pt`.
+
+### All available flags
+
+```
+--mode {simple,advanced}   Preset mode (default: simple)
+
+-- Data & Tokenizer --
+--data_path PATH           Path to training text
+--tokenizer {char,bpe}     Tokenizer type
+--bpe_vocab_size N         BPE vocabulary size
+
+-- Model --
+--block_size N             Context length in tokens
+--n_embd N                 Embedding dimension
+--n_heads N                Number of attention heads
+--n_layers N               Number of transformer blocks
+--dropout F                Dropout rate
+
+-- Training --
+--batch_size N             Batch size
+--max_iters N              Maximum iterations
+--learning_rate F          Learning rate
+--use_lr_scheduler BOOL    Learning-rate scheduler (true/false)
+--eval_interval N          Evaluation interval
+--train_split F            Training fraction (0–1)
+--seed N                   Random seed
+
+-- Generation --
+--gen_start_text TEXT      Seed text for intermediate generation
+--gen_max_tokens N         Tokens per intermediate generation
+--gen_temperature F        Sampling temperature
+--gen_top_k N              Top-K (0 = disabled)
+```
 
 ---
 
@@ -152,27 +204,28 @@ Frequently co-occurring characters are iteratively merged into subword tokens. C
 > **Rule of thumb:** About one additional merge step makes sense per ~200 characters of training text.
 > For 10,000 characters of text, `bpe_vocab_size=500` is already sufficient; `2000` works fine as well.
 
-### Switching in `train.py`
+### Switching via CLI
 
-```python
-# In train.py, CONFIG block:
+```bash
+# Character-level (equivalent to simple mode):
+uv run python train.py --tokenizer char
 
-# BPE (default, recommended):
-"tokenizer":     "bpe",
-"bpe_vocab_size": 2000,
-
-# Character-level (fast, minimalist):
-"tokenizer":    "char",
+# BPE (equivalent to advanced mode):
+uv run python train.py --tokenizer bpe --bpe_vocab_size 2000
 ```
 
-> **Important:** If you change the tokeniser mode, the model **must be retrained**.
+> **Important:** If you change the tokeniser type, the model **must be retrained**.
 > A checkpoint saved with BPE cannot be loaded with the char tokeniser – delete or rename the checkpoint file.
 
 ---
 
 ## 6. Adjusting Hyperparameters
 
-Open `train.py` and change the values in the `CONFIG` dictionary at the very top of the script. Then simply restart training.
+All parameters can be passed as CLI flags and override the mode preset:
+
+```bash
+uv run python train.py --block_size 128 --n_embd 64 --n_heads 4
+```
 
 ### Context length: `block_size`
 
@@ -214,12 +267,13 @@ How many text snippets are processed per training step.
 
 ### Intermediate generation
 
-```python
-"eval_interval":   250,    # every X iterations: print loss + text sample
-"gen_start_text":  "Der",  # seed word for the generated sample text
-"gen_max_tokens":  120,    # number of characters generated per intermediate report
-"gen_temperature": 0.8,    # < 1.0 → conservative | > 1.0 → creative/random
-"gen_top_k":       40,     # consider only the k most probable candidates
+```bash
+uv run python train.py \
+  --eval_interval 250 \
+  --gen_start_text "Der" \
+  --gen_max_tokens 120 \
+  --gen_temperature 0.8 \
+  --gen_top_k 40
 ```
 
 ---
@@ -365,8 +419,9 @@ flowchart TD
 
 ## 11. Tips for Experiments
 
-1. **Start small:** Set `n_embd=32`, `n_layers=2` – observe the output, then scale up gradually.
-2. **Detect overfitting:** `val_loss` rises while `train_loss` falls → increase `dropout` from `0.1` to `0.2`.
-3. **Overcome a plateau:** Loss stagnates → halve `learning_rate` or set `use_lr_scheduler: True`.
-4. **Explore temperature:** After training, set `gen_temperature` from `0.2` (very focused) to `1.5` (very creative) and compare the texts.
-5. **More data:** The more text in `data/training_text.txt`, the smoother the generated text. Use `fetch_wikipedia.py` to quickly add more articles.
+1. **Start with `simple`:** The simple mode is intentionally fast — ideal for a first try. Then switch to a larger dataset with `--mode advanced`.
+2. **Start small:** `uv run python train.py --n_embd 32 --n_layers 2` – observe the output, then scale up gradually.
+3. **Detect overfitting:** `val_loss` rises while `train_loss` falls → add `--dropout 0.2`.
+4. **Overcome a plateau:** Loss stagnates → try `--learning_rate 5e-4` or `--use_lr_scheduler true`.
+5. **Explore temperature:** `uv run python generate.py --temperature 0.2` (very focused) to `--temperature 1.5` (very creative) and compare the texts.
+6. **More data:** The more text in `data/training_text.txt`, the smoother the generated text. Use `fetch_wikipedia.py` and then train with `--mode advanced`.
