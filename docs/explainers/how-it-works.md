@@ -340,40 +340,40 @@ optimizer.step()                         # Gewichte anpassen
 
 ```mermaid
 flowchart TD
-    BATCH["Batch: zufällige Textausschnitte\naus dem Trainingstext"]
-    FWD["Forward Pass — Matrizen werden gelesen\n• token_embedding.weight\n• position_embedding.weight\n• Head: key, query, value\n• MultiHead: proj\n• FeedForward: net[0], net[2]\n• ln1, ln2, ln_final (LayerNorm)\n• lm_head"]
-    LOSS["Cross-Entropy Loss\nWie weit lag das Modell daneben?"]
-    BWD["Backward Pass — Gradienten werden berechnet\nfür ALLE oben genannten Matrizen"]
-    CLIP["Gradient Clipping\nmax_norm = 1.0\nzu große Gradienten werden gekappt"]
-    OPT["AdamW: Gewichte anpassen\nALLE Matrizen werden aktualisiert:\nW ← W − lr × gradient"]
-    SCH["LR-Scheduler\nLernrate langsam reduzieren"]
-    NEXT["Nächste Iteration"]
+    BATCH["📚 Batch\nZufällige Textausschnitte aus dem Trainingstext"]
+    FWD["👁 Forward Pass — Vorwärts lesen\nStation 1: Karteikarten nachschlagen\nStation 2: Positionsschilder addieren\nStation 3: Frage-, Angebot- u. Inhalts-Tabellen befragen\nStation 4: Notizen aufarbeiten\nStation 5: Wahrscheinlichkeits-Tabelle befragen"]
+    LOSS["❌ Fehler messen\nWie weit lag die Vorhersage daneben?"]
+    BWD["🔁 Backward Pass — Rückwärts Schuld verteilen\nJede Station bekommt ihren Schuld-Anteil\n(Gradient = wie stark muss sich diese Karteikarte ändern?)"]
+    CLIP["✂ Sicherheitsbremse\nKein Gradient darf zu groß werden"]
+    OPT["✏ Alle Karteikarten korrigieren\nJede Matrix wird ein kleines Stück verbessert"]
+    SCH["📉 Schrittgröße verkleinern\nAm Anfang große, am Ende kleine Korrekturen"]
+    NEXT["➡ Nächste Iteration"]
 
     BATCH --> FWD --> LOSS --> BWD --> CLIP --> OPT --> SCH --> NEXT --> BATCH
 ```
 
-#### Alle lernbaren Matrizen im Überblick
+#### Alle lernbaren Karteikarten (Matrizen) im Überblick
 
-Das sind die Gewichte, die `optimizer.step()` bei jedem Trainingsschritt verändert. Im simple-Modus (`n_embd=32`, `n_heads=4`, `n_layers=2`, `vocab_size=67`, `block_size=64`):
+Jede dieser „Karteikarten" ist eine Matrix aus Zahlen. Sie starten mit Zufallswerten und werden nach jedem Trainingsschritt ein kleines Stück verbessert. Im simple-Modus (`n_embd=32`, `n_heads=4`, `n_layers=2`, `vocab_size=67`, `block_size=64`):
 
-| Matrix | Klasse | Größe (simple) | Was sie lernt | Code-Zeile |
-|---|---|---|---|---|
-| `token_embedding.weight` | `MiniTransformer` | 67 × 32 | Bedeutungs-Vektor pro Zeichen | [`model.py:157`](../../model.py:157) |
-| `position_embedding.weight` | `MiniTransformer` | 64 × 32 | Struktur-Vektor pro Position | [`model.py:158`](../../model.py:158) |
-| `heads[i].key.weight` | `Head` (× n_heads) | 32 × 8 | Wie ein Token sich „anbietet" | [`model.py:37`](../../model.py:37) |
-| `heads[i].query.weight` | `Head` (× n_heads) | 32 × 8 | Wonach ein Token „sucht" | [`model.py:38`](../../model.py:38) |
-| `heads[i].value.weight` | `Head` (× n_heads) | 32 × 8 | Was ein Token weitergibt | [`model.py:39`](../../model.py:39) |
-| `sa.proj.weight` | `MultiHeadAttention` | 32 × 32 | Wie Heads zusammengemischt werden | [`model.py:74`](../../model.py:74) |
-| `ff.net[0].weight` | `FeedForward` | 32 × 128 | Erster Denk-Schritt (Aufweiten) | [`model.py:94`](../../model.py:94) |
-| `ff.net[2].weight` | `FeedForward` | 128 × 32 | Zweiter Denk-Schritt (Zusammenziehen) | [`model.py:96`](../../model.py:96) |
-| `ln1.weight` / `ln1.bias` | `Block` | 32 / 32 | Skalierung vor Attention | [`model.py:119`](../../model.py:119) |
-| `ln2.weight` / `ln2.bias` | `Block` | 32 / 32 | Skalierung vor FFN | [`model.py:120`](../../model.py:120) |
-| `ln_final.weight` / `bias` | `MiniTransformer` | 32 / 32 | Letzte Normierung | [`model.py:162`](../../model.py:162) |
-| `lm_head.weight` | `MiniTransformer` | 32 × 67 | Vektor → Wahrscheinlichkeit pro Zeichen | [`model.py:163`](../../model.py:163) |
+| Station (Bibliotheks-Bild) | Was die Karteikarte speichert | Größe (simple) | Im Debugger / Code |
+|---|---|---|---|
+| **Station 1** — Bedeutungs-Karteikarten | Für jedes der 67 Zeichen einen 32-dimensionalen Steckbrief: Was bedeutet dieses Zeichen? | 67 × 32 | `model.token_embedding.weight` · [`model.py:157`](../../model.py:157) |
+| **Station 2** — Positions-Karteikarten | Für jede der 64 möglichen Positionen im Satz: Was ist typisch für diese Stelle? | 64 × 32 | `model.position_embedding.weight` · [`model.py:158`](../../model.py:158) |
+| **Station 3** — Frage-Tabelle (Query) | Wie fragt ein Token: *„Was suche ich gerade?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].query.weight` · [`model.py:38`](../../model.py:38) |
+| **Station 3** — Angebot-Tabelle (Key) | Wie antwortet ein Token: *„Was biete ich an?"* — einmal pro Lese-Tisch | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].key.weight` · [`model.py:37`](../../model.py:37) |
+| **Station 3** — Inhalts-Tabelle (Value) | Was gibt ein Token wirklich weiter, wenn es ausgewählt wird | 32 × 8 (× 4 Heads) | `model.blocks[i].sa.heads[j].value.weight` · [`model.py:39`](../../model.py:39) |
+| **Station 3** — Misch-Tabelle (Projektion) | Wie werden die 4 Lese-Tische zu einem Ergebnis zusammengefasst | 32 × 32 | `model.blocks[i].sa.proj.weight` · [`model.py:74`](../../model.py:74) |
+| **Station 4** — Notiz-Aufweitung | Erste Schicht des Denk-Schritts: Ideen ausbreiten (4× breiter) | 32 × 128 | `model.blocks[i].ff.net[0].weight` · [`model.py:94`](../../model.py:94) |
+| **Station 4** — Notiz-Verdichtung | Zweite Schicht: Ideen wieder zusammenziehen | 128 × 32 | `model.blocks[i].ff.net[2].weight` · [`model.py:96`](../../model.py:96) |
+| **Zwischen Station 3 u. 4** — Maßstabs-Regler | Gleicht Werte vor Attention an (LayerNorm) | 32 + 32 | `model.blocks[i].ln1.weight/bias` · [`model.py:119`](../../model.py:119) |
+| **Zwischen Station 4 u. 5** — Maßstabs-Regler | Gleicht Werte vor FFN an (LayerNorm) | 32 + 32 | `model.blocks[i].ln2.weight/bias` · [`model.py:120`](../../model.py:120) |
+| **Vor Station 5** — Letzter Maßstabs-Regler | Abschluss-Normierung nach allen Blöcken | 32 + 32 | `model.ln_final.weight/bias` · [`model.py:162`](../../model.py:162) |
+| **Station 5** — Wahrscheinlichkeits-Tabelle | Übersetzt den 32-dim. Vektor in 67 Scores — einer pro Zeichen | 32 × 67 | `model.lm_head.weight` · [`model.py:163`](../../model.py:163) |
 
-> **Hinweis Größen:** `heads[i]` gibt es `n_heads=4` Mal, `Block`-Matrizen `n_layers=2` Mal. Die `ff.net[0]`-Matrix ist `4 × n_embd` breit — der klassische GPT-4×-Faktor.
+> **Hinweis Vielfachheit:** Die Stationen 3 und 4 (inkl. Maßstabs-Regler) gibt es `n_layers=2` Mal übereinander gestapelt — also `blocks[0]` und `blocks[1]`. Pro Block gibt es `n_heads=4` Frage/Angebot/Inhalts-Tabellen.
 
-Die Gesamtzahl aller Parameter im Debugger prüfen:
+Gesamtzahl aller Zahlen im Debugger prüfen:
 ```python
 sum(p.numel() for p in model.parameters())
 ```
