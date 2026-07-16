@@ -4,11 +4,11 @@
 
 ---
 
-## Die durchgängige Analogie: die Bibliothek mit Lese-AGs
+## Die durchgängige Analogie: die Bibliothek mit Lese-Gruppen
 
-Stell dir vor, du bist **Bibliothekar** und möchtest automatisch den nächsten Satz eines Buches weiterschreiben. Dazu rufst du eine **Lese-AG** (das Modell).
+Stell dir vor, du bist **Bibliothekar** und möchtest automatisch den nächsten Satz eines Buches weiterschreiben. Dazu rufst du eine **Lese-Gruppe** (das Modell).
 
-Die AG arbeitet in fünf Stationen — **genau die fünf Stufen des Transformers**:
+Die Lese-Gruppe arbeitet in fünf Stationen — **genau die fünf Stufen des Transformers**:
 
 ```mermaid
 flowchart LR
@@ -439,7 +439,7 @@ Im **advanced**-Modus gilt: **6.000 × 32 Batches** = das Modell sieht ~192.000 
 Nach dem Training sind alle Gewichte eingefroren — **keine Gradienten, keine Updates mehr**. Das Modell ist jetzt ein reiner Leser, der auf Basis des gelernten Wissens vorwärts schreibt.
 
 **Bibliotheks-Analogie:**
-Die Lese-AG hat ihre Abschlussprüfung gemacht. Die Karteikarten (Gewichte) sind jetzt fest beschriftet und werden nicht mehr verändert. Jetzt sitzt der Bibliothekar am Schreibtisch und schreibt — Wort für Wort — den nächsten Satz, indem er immer wieder in seine fertigen Karteikarten schaut.
+Die Lese-Gruppe hat ihre Abschlussprüfung gemacht. Die Karteikarten (Gewichte) sind jetzt fest beschriftet und werden nicht mehr verändert. Jetzt sitzt der Bibliothekar am Schreibtisch und schreibt — Wort für Wort — den nächsten Satz, indem er immer wieder in seine fertigen Karteikarten schaut.
 
 #### Wie ein Satz entsteht — Schritt für Schritt
 
