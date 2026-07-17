@@ -4,21 +4,244 @@
 
 ---
 
-## Was ist ein neuronales Netz überhaupt?
+## Neuronale Netze als gelernte Formel — die Physik-Analogie
 
-Ein neuronales Netz ist im Kern eine **Funktion, die Zahlen in Zahlen umwandelt** — und die Gewichte dieser Funktion werden durch Training automatisch angepasst.
+### Die Black-Box-Sichtweise
 
-Die Grundidee in drei Schritten:
+Eine physikalische Formel wie `F = m · a` ist eine Black Box: `m` und `a` kommen herein, `F` kommt heraus. Man muss nicht wissen, wie das Universum „intern" funktioniert — man steckt Werte rein und bekommt eine Antwort.
 
-1. **Eingabe** → Zahlenvektor (z. B. ein Token-Vektor mit 96 Zahlen)
-2. **Transformation** → multipliziere mit einer lernbaren Gewichtsmatrix, addiere optional einen Bias-Vektor, wende optional eine Aktivierungsfunktion an
-3. **Ausgabe** → neuer Zahlenvektor (z. B. ein Score pro möglichem nächstem Token)
+Ein trainiertes neuronales Netz ist **dasselbe Prinzip** — nur dass die Formel nicht vom menschlichen Verstand entdeckt, sondern automatisch aus Daten optimiert wurde:
 
-Das klingt simpel. Die Stärke kommt davon, dass man viele solcher Transformationsschritte hintereinander schaltet — und die Gewichte durch Fehlerrückrechnung (Backpropagation) so justiert, dass das Netz immer bessere Vorhersagen macht.
+| | Physikalische Formel | Neuronales Netz |
+|---|---|---|
+| **Eingabe** | `m`, `a` | Eingabevektor `x` |
+| **Funktion** | `F = m · a` (bekannt, analytisch) | `y = W₂ · ReLU(W₁ · x + b₁) + b₂` (gelernt) |
+| **Ausgabe** | `F` | Vorhersage `y` |
+| **Woher kommt die Funktion?** | Menschlicher Verstand + Experiment | Automatisch aus Trainingsdaten optimiert |
+| **Interpretierbar?** | Ja — jeder Term hat eine Bedeutung | Nein — die Gewichte `W` sind nur Zahlen |
+
+Der einzige strukturelle Unterschied: Bei `F = m·a` kennt man die Formel. Beim NN kennt man nur die Gewichte `W`, die die Formel **implizit** kodieren.
 
 ---
 
-## Die drei Grundbausteine
+### Kann ein NN Physik aus Messdaten nachbauen?
+
+**Ja — und das passiert tatsächlich in der Forschung.** Das nennt sich **Scientific Machine Learning** oder **Physics Discovery with NNs**.
+
+Konkrete Methoden, die real existieren:
+
+- **SINDy** (Sparse Identification of Nonlinear Dynamics): Findet aus Messdaten symbolische Formeln — entdeckt z. B. selbst, dass `F = m·a` die beste Erklärung ist
+- **PINNs** (Physics-Informed Neural Networks): Ein NN löst Differentialgleichungen nur aus Randbedingungen, ohne dass die Gleichung explizit vorgegeben wird
+- **AI Feynman** (Tegmark et al., MIT): Rekonstruiert aus Messdaten symbolische physikalische Gleichungen — und hat Formeln wie `E = ½mv²` tatsächlich wiederentdeckt
+
+---
+
+### Gemeinsamkeiten und Unterschiede
+
+#### Was beide gemeinsam haben
+
+- Beide sind **Eingabe → Funktion → Ausgabe**: Black Boxes, die Zahlen in Zahlen abbilden
+- Beide können **interpolieren**: für Eingaben zwischen bekannten Werten funktionieren beide zuverlässig
+- Beide sind **deterministisch**: gleiche Eingabe → gleiche Ausgabe (kein Zufall zur Laufzeit)
+- Beide **approximieren die Realität**: auch `F = m·a` ist eine Näherung (gilt streng nur für konstante Masse, ohne Relativität usw.)
+
+#### Wo sie sich unterscheiden
+
+| Eigenschaft | Physikalisches Gesetz | Neuronales Netz |
+|---|---|---|
+| **Herkunft** | Menschliche Einsicht + Experiment | Gradientenabstieg auf Trainingsdaten |
+| **Parameterzahl** | Oft 1–5 Parameter | Tausende bis Milliarden Gewichte |
+| **Extrapolation** | Gilt universell (innerhalb des Gültigkeitsbereichs) | Bricht außerhalb der Trainingsdaten oft zusammen |
+| **Interpretierbarkeit** | Jeder Term hat physikalische Bedeutung | Gewichte sind bedeutungslose Zahlen |
+| **Kompaktheit** | `F = m·a` passt auf eine Zeile | Nicht in einer Formel darstellbar |
+| **Rauschen** | Filtert Messfehler durch Ableitung | Kann Messrauschen einlernen (Overfitting) |
+| **Generalisierung** | Gilt für alle `m` und `a` | Nur zuverlässig im Trainingsbereich |
+
+---
+
+### Die entscheidende Einschränkung: Extrapolation
+
+`F = m·a` gilt für alle `m` und `a` — auch für `m = 10.000 kg`, das nie gemessen wurde. Ein NN, das nur mit `m` zwischen 1 und 10 kg trainiert wurde, wird für `m = 1000 kg` vermutlich falsch liegen — weil es die lineare Beziehung nicht als **universelles Gesetz** gelernt hat, sondern als **lokale Kurvenanpassung** der Trainingsdaten.
+
+```
+Physikalisches Gesetz:   ──────────────────────────────────────►  (gerade Linie, immer gültig)
+                         0        10       100      1000    m →
+
+Neuronales Netz:         ──────────╌╌╌╌╌╌╌╌?????????             (sicher nur im Trainingsbereich)
+                         0        10       100      1000    m →
+                              ↑
+                         Trainingsbereich
+```
+
+---
+
+### Fazit
+
+Das Bild ist präzise: Ein trainiertes NN **ist** eine gelernte Black-Box-Formel. Man kann damit Naturgesetze aus Messdaten rekonstruieren — das Prinzip funktioniert. Die Grenzen liegen nicht im Prinzip, sondern in **Generalisierung** (kein universelles Gesetz), **Interpretierbarkeit** (keine Bedeutung hinter den Gewichten) und **Datenbedarf** (braucht viel mehr Beispiele als ein Mensch, um dasselbe zu lernen).
+
+---
+
+## Warum heißt es „neuronales Netz"?
+
+Der Name kommt aus der Biologie: Das Gehirn besteht aus Milliarden von **Neuronen** (Nervenzellen), die über **Synapsen** miteinander verbunden sind. Jedes Neuron empfängt Signale von anderen Neuronen, summiert sie, und feuert — oder nicht — ein eigenes Signal weiter.
+
+```
+Biologisches Neuron:
+  Eingangssignale (x₁, x₂, x₃)
+       ↓   ↓   ↓
+  Gewichtete Summe:  x₁·w₁ + x₂·w₂ + x₃·w₃  +  Schwellwert
+       ↓
+  Aktivierungsfunktion:  "Feuere, wenn der Wert groß genug ist"
+       ↓
+  Ausgangssignal
+```
+
+Das **künstliche Neuron** ist eine stark vereinfachte mathematische Nachbildung genau dieses Prinzips:
+
+```
+Künstliches Neuron:
+  Eingaben:           x₁, x₂, x₃
+  Gewichte:           w₁, w₂, w₃  (lernbar)
+  Bias:               b            (lernbar, entspricht dem Schwellwert)
+  Gewichtete Summe:   z = x₁·w₁ + x₂·w₂ + x₃·w₃ + b
+  Aktivierung:        a = f(z)     (z. B. ReLU: max(0, z))
+```
+
+Ein **neuronales Netz** ist eine Ansammlung vieler solcher künstlichen Neuronen — in Schichten organisiert, miteinander verbunden. Der Name ist also eine Analogie: genauso wie Neuronen im Gehirn durch Aktivierungs- und Hemmungsmuster zusammen Entscheidungen treffen, tun es auch die mathematischen Neuronen in einem NN.
+
+> **Wichtig:** Die Analogie zum Gehirn ist oberflächlich. Echte Neuronen sind viel komplexer. Künstliche neuronale Netze sind primär gut funktionierende **Funktionsapproximatoren** — sie können (mit genug Parametern) nahezu jede beliebige Funktion lernen.
+
+---
+
+## Eine Schicht oder mehrere? — Das mehrschichtige Netz
+
+### Ein einzelnes Neuron
+
+Ein einzelnes Neuron kann nur **lineare Entscheidungsgrenzen** lernen — es kann z. B. unterscheiden, ob eine Zahl größer oder kleiner als 5 ist, aber nicht, ob sie *zwischen* 3 und 7 liegt.
+
+### Eine Schicht (= viele Neuronen parallel)
+
+Eine **Schicht** besteht aus mehreren Neuronen, die alle **dieselbe Eingabe** bekommen, aber **unterschiedliche Gewichte** haben. Jedes Neuron lernt dabei ein anderes Merkmal.
+
+```
+Eingabe x (3 Werte)     Schicht (4 Neuronen)     Ausgabe (4 Werte)
+
+  x₁ ─┬──────────────── Neuron 1 (Gewichte w₁₁, w₁₂, w₁₃)  →  a₁
+  x₂ ─┼──────────────── Neuron 2 (Gewichte w₂₁, w₂₂, w₂₃)  →  a₂
+  x₃ ─┴──────────────── Neuron 3 (Gewichte w₃₁, w₃₂, w₃₃)  →  a₃
+                   └─── Neuron 4 (Gewichte w₄₁, w₄₂, w₄₃)  →  a₄
+```
+
+Das ist genau das, was `nn.Linear(3, 4)` macht: eine Matrix mit 4 × 3 = 12 lernbaren Gewichten.
+
+### Mehrere Schichten hintereinander — warum?
+
+**Muss** man mehrere Schichten verwenden? Nein — aber man sollte es fast immer tun, wenn das Problem komplex genug ist.
+
+| Tiefe | Was lernbar ist | Beispiel |
+|---|---|---|
+| 1 Schicht | Lineare Muster | „Ist Wort A größer als Wert B?" |
+| 2 Schichten + Aktivierung | Einfache nichtlineare Muster | „Liegt A zwischen B und C?" |
+| Viele Schichten | Hierarchische, abstrakte Muster | „Ist das ein grammatisch korrekter Satz?" |
+
+Der **Universelle Approximationssatz** besagt: Ein Netz mit *einer* ausreichend breiten versteckten Schicht und einer Aktivierungsfunktion kann theoretisch jede stetige Funktion approximieren. In der Praxis sind aber mehrere, schmälere Schichten effizienter — sie lernen hierarchische Merkmale (erst einfache Muster, dann komplexere Kombinationen davon).
+
+> **Im MiniTransformer:** Die Q/K/V-Projektionen und der LM Head sind jeweils **1-schichtig** (eine `nn.Linear`). Das FeedForward-Netz ist **2-schichtig** (`Linear → ReLU → Linear`). Der gesamte Transformer mit `n_layers=4` Blöcken ist effektiv ein sehr tiefes Netz — aber die Tiefe kommt durch das Stapeln der Blöcke, nicht durch ein einzelnes tiefes MLP.
+
+---
+
+## Die mathematische Funktion eines neuronalen Netzes
+
+### Schritt 1 — Ein einzelnes Neuron
+
+Gegeben einen Eingabevektor **x** mit `n` Werten:
+
+```
+x = [x₁, x₂, ..., xₙ]
+```
+
+Ein Neuron berechnet:
+
+```
+z = w₁·x₁ + w₂·x₂ + ... + wₙ·xₙ + b
+  = Σᵢ (wᵢ · xᵢ) + b
+  = w · x  +  b        (als Vektorprodukt geschrieben)
+```
+
+Dann kommt die Aktivierungsfunktion:
+
+```
+a = f(z)   →   z. B. ReLU: a = max(0, z)
+```
+
+### Schritt 2 — Eine ganze Schicht als Matrixoperation
+
+Statt jeden Neuron einzeln zu berechnen, fasst man alle Neuronen einer Schicht in eine **Matrix** zusammen. Das ist der Kern von `nn.Linear`:
+
+```
+Eingabe:    x  ∈ ℝⁿ         (Vektor mit n Werten)
+Gewichte:   W  ∈ ℝᵐˣⁿ      (Matrix: m Neuronen, je n Gewichte)
+Bias:       b  ∈ ℝᵐ         (Vektor mit m Werten)
+
+Ausgabe:    z = W · x + b   ∈ ℝᵐ
+```
+
+Konkret für `nn.Linear(3, 4)` — 3 Eingaben, 4 Ausgabe-Neuronen:
+
+```
+     W (4×3)          x (3)     b (4)     z (4)
+
+  [w₁₁ w₁₂ w₁₃]   [x₁]   [b₁]   [w₁₁x₁ + w₁₂x₂ + w₁₃x₃ + b₁]
+  [w₂₁ w₂₂ w₂₃] · [x₂] + [b₂] = [w₂₁x₁ + w₂₂x₂ + w₂₃x₃ + b₂]
+  [w₃₁ w₃₂ w₃₃]   [x₃]   [b₃]   [w₃₁x₁ + w₃₂x₂ + w₃₃x₃ + b₃]
+  [w₄₁ w₄₂ w₄₃]          [b₄]   [w₄₁x₁ + w₄₂x₂ + w₄₃x₃ + b₄]
+```
+
+### Schritt 3 — Mehrere Schichten hintereinander
+
+Die Ausgabe einer Schicht wird zur Eingabe der nächsten. Für ein 2-schichtiges Netz (wie das FFN in [`model.py:93-98`](../../model.py:93)):
+
+```
+Eingabe:     x
+
+Schicht 1:   z₁ = W₁ · x  + b₁        (Linear: n_embd → 4·n_embd)
+Aktivierung: a₁ = ReLU(z₁)             (Nichtlinearität)
+Schicht 2:   z₂ = W₂ · a₁ + b₂        (Linear: 4·n_embd → n_embd)
+
+Ausgabe:     z₂
+```
+
+Eingesetzt:
+
+```
+Ausgabe = W₂ · ReLU(W₁ · x + b₁) + b₂
+```
+
+Das `ReLU` in der Mitte ist entscheidend: Ohne es wäre `W₂ · (W₁ · x + b₁) + b₂` nur eine einzige lineare Transformation `(W₂·W₁)·x + (W₂·b₁+b₂)` — mathematisch identisch zu einer einzelnen Schicht.
+
+### Schritt 4 — Wie lernen die Gewichte?
+
+Das Ziel ist, die Gewichte `W` und `b` so zu finden, dass der Vorhersagefehler (Loss) möglichst klein wird. Das geschieht über den **Gradienten**:
+
+```
+Für jedes Gewicht w:
+  ∂Loss/∂w  →  "Wenn ich w um ε erhöhe, wie ändert sich der Loss?"
+```
+
+- Ist `∂Loss/∂w > 0` → w erhöhen macht den Loss größer → w verringern
+- Ist `∂Loss/∂w < 0` → w erhöhen macht den Loss kleiner → w erhöhen
+
+Der **Gradient-Descent**-Schritt:
+
+```
+w_neu = w_alt  −  lernrate · (∂Loss/∂w)
+```
+
+PyTorch berechnet alle diese Ableitungen automatisch via `loss.backward()` ([`train.py:396`](../../train.py:396)). AdamW ([`train.py:339`](../../train.py:339)) ist eine verbesserte Variante: es merkt sich für jedes Gewicht, wie stark und in welche Richtung es in der Vergangenheit aktualisiert wurde, und passt die effektive Lernrate individuell an.
+
+---
+
+## Die drei Grundbausteine in PyTorch
 
 ### 1. Lineare Schicht — `nn.Linear`
 
